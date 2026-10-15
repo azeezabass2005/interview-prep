@@ -1,0 +1,4 @@
+HALF_LIFE_HOURS = 6
+TRACKING_PARAMS = ("utm_", "ref", "cmpid")
+DEFAULT_LIMIT = 20
+MAX_LIMIT = 100

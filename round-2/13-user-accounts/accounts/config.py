@@ -1,0 +1,5 @@
+MAX_FAILED_LOGINS = 5
+LOCKOUT_MINUTES = 15
+RESET_TOKEN_TTL_MINUTES = 60
+PBKDF2_ITERATIONS = 1_000  # low for the exercise; production uses far more
+MIN_PASSWORD_LENGTH = 10

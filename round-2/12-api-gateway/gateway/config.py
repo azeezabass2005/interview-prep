@@ -1,0 +1,3 @@
+WINDOW_SECONDS = 60
+PLAN_LIMITS = {"free": 60, "pro": 600, "enterprise": 6000}
+PLAN_CACHE_TTL_SECONDS = 60

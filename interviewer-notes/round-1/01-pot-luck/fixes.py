@@ -1,0 +1,25 @@
+"""Reference minimal fixes: (path, old, new) replacements applied to the exercise."""
+FIXES = [
+    ("potluck/drawing.py",
+     'return str(self._rng.randint(0, 10 ** CODE_LENGTH - 1))',
+     'return f"{self._rng.randint(0, 10 ** CODE_LENGTH - 1):0{CODE_LENGTH}d}"'),
+    ("potluck/matching.py",
+     'return sum(1 for digit in entry_code if digit in winning_code)',
+     'return sum(1 for a, b in zip(entry_code, winning_code) if a == b)'),
+    ("potluck/payouts.py",
+     'for tier in sorted(winners_by_tier):',
+     'for tier in sorted(winners_by_tier, reverse=True):'),
+    ("potluck/drawing.py",
+     'return SPONSOR_SEED_CENTS + ENTRY_FEE_CENTS * len(self._entries)',
+     'return SPONSOR_SEED_CENTS + ENTRY_FEE_CENTS * len(self._entries) + self._rollover_cents'),
+    ("potluck/drawing.py",
+     '            entries=self._entries,\n',
+     '            entries=list(self._entries),\n'),
+    ("potluck/drawing.py",
+     '        self._entries.clear()\n',
+     '        self._entries = []\n'),
+    ("potluck/drawing.py",
+     '        if not participant:\n            raise ValueError("participant is required")\n',
+     '        if self._closed:\n            raise RuntimeError("draw is closed")\n'
+     '        if not participant:\n            raise ValueError("participant is required")\n'),
+]
