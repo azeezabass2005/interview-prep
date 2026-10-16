@@ -18,7 +18,6 @@ class PasswordResetService:
         self._clock = clock
 
     def request_reset(self, email: str):
-        """Returns the token (in production it's e-mailed). Unknown addresses return None silently."""
         user = self._users.by_email(email)
         if user is None or user.deleted_at is not None:
             return None

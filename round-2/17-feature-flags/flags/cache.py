@@ -6,7 +6,6 @@ from .repositories.flags import FlagRepository
 
 
 class FlagCache:
-    """Per-process snapshot of all flags, refreshed at most every TTL seconds."""
 
     def __init__(self, repo: FlagRepository, clock, ttl_seconds: float = FLAG_CACHE_TTL_SECONDS):
         self._repo = repo

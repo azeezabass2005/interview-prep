@@ -1,17 +1,21 @@
 from dataclasses import dataclass
+from datetime import date
 from typing import Optional
 
 
 @dataclass(frozen=True)
-class Result:
+class Fixture:
+    fixture_id: str
     home: str
     away: str
-    home_goals: Optional[int] = None
-    away_goals: Optional[int] = None
+    played_on: date
 
-    @property
-    def played(self) -> bool:
-        return self.home_goals is not None and self.away_goals is not None
+
+@dataclass(frozen=True)
+class Result:
+    fixture_id: str
+    home_goals: int
+    away_goals: int
 
 
 @dataclass

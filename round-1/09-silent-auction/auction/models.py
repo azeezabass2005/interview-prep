@@ -1,33 +1,50 @@
 from dataclasses import dataclass, field
+from datetime import datetime
+from decimal import Decimal
 from typing import List, Optional
-
-INCREMENT_CENTS = 500
-OPENING_PRICE_CENTS = 1000
-BUYERS_PREMIUM_PERCENT = 10
-
-
-@dataclass(frozen=True)
-class Bid:
-    bidder: str
-    amount_cents: int
-    seq: int  # global submission order
 
 
 @dataclass
 class Lot:
     lot_id: str
-    reserve_cents: Optional[int] = None
-    bids: List[Bid] = field(default_factory=list)
+    title: str
+    opening: Decimal
+    fmv: Decimal
+    closes_at: datetime
+    reserve: Optional[Decimal] = None
     closed: bool = False
+    winner: Optional[str] = None
+    hammer: Optional[Decimal] = None
 
 
 @dataclass(frozen=True)
-class Result:
+class Bidder:
+    paddle: int
+    name: str
+
+
+@dataclass(frozen=True)
+class Bid:
     lot_id: str
-    winner: str
-    hammer_cents: int
-    invoice_cents: int
+    paddle: int
+    maximum: Decimal
+    placed_at: datetime
+    seq: int
 
 
-class AuctionError(Exception):
-    pass
+@dataclass
+class InvoiceLine:
+    lot_id: str
+    hammer: Decimal
+    premium: Decimal
+    deductible: Decimal
+
+
+@dataclass
+class Invoice:
+    paddle: int
+    lines: List[InvoiceLine] = field(default_factory=list)
+
+    @property
+    def total(self) -> Decimal:
+        return sum((l.hammer + l.premium for l in self.lines), Decimal("0.00"))

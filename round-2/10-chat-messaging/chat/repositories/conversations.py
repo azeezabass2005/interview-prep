@@ -17,7 +17,6 @@ class ConversationRepository:
                                 (conversation_id, user_id)).fetchone() is not None
 
     def next_seq(self, conversation_id: str) -> int:
-        """Atomically allocate the next sequence number for a conversation."""
         with self._db.transaction() as conn:
             conn.execute("BEGIN IMMEDIATE")
             conn.execute("UPDATE conversations SET last_seq = last_seq + 1 WHERE conversation_id = ?", (conversation_id,))

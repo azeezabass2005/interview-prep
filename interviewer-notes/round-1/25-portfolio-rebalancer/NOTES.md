@@ -1,33 +1,71 @@
-# 25 · Portfolio Rebalancer: interviewer notes
+# R1-25 · Robo-Advisor Rebalancing: Interviewer Guide
 
-Code: `rebalance/engine.py`. Shape: buffer applied to the base, a band with the right denominator, rounding toward zero, two-phase ordering (sells then prioritised buys), cash constraint.
+~200 lines in `robo/`. One passing test (an already balanced account). Five bugs in a ~40-line planner plus the target calculation.
+Expect candidates to need several small, isolated scenarios.
+
+## Session plan (60 min)
+0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
-
-| Topic | Answer |
+| Question | Answer |
 |---|---|
-| Band denominator | 5% of **total portfolio value**, not of the holding's target. |
-| "Toward zero" | +9.6 → 9; −21.6 → −21. |
-| Buy priority | Largest dollar underweight first. Ties: alphabetical. |
-| Holdings with no target | Out of scope (all holdings have a target). |
-| Prices change during execution | Out of scope; use the given prices. |
+| Band denominator | 5% of **total** value. |
+| Toward zero | −21.6 → −21; +9.6 → 9. |
+| Restricted symbol not in the model | Still sold to zero. |
+| Ties on underweight | Alphabetical. |
+| Redistribution base | Model weights of the unrestricted symbols. |
 | Fractional shares | Not supported. |
 
-## Planted issues
+## Code map
+| Module | Responsibility |
+|---|---|
+| `services/targets.py` | Effective weights (restrictions), total value, target values |
+| `services/planner.py` | Band, quantity, ordering, cash limit, minimum trade |
+| `services/accounts.py`, `services/prices.py` | Models, accounts, prices |
+| `store.py`, `api.py`, `app.py` | Storage, facade, wiring |
 
-| ID | Location | What is wrong | Fix | Failing test |
-|---|---|---|---|---|
-| B1 | `target_values` | Ignores the 2% buffer (`investable = total`) | `total * (1 - CASH_BUFFER)` | spec: targets AAA 3,920 / BBB 5,880 |
-| B2 | `plan` | Band compared against `BAND * target` (the holding's target), not total value | `BAND * total` | CCC target 5%, holds $700: diff 210 < 500 → no CCC trade |
-| B3 | `plan` | Trades in target-dict order, so a buy listed before a sell runs out of cash | two passes: sells, then buys | spec example with BBB listed first: still SELL AAA 21, BUY BBB 9 |
-| B4 | `trade_quantity` | `math.floor` overshoots on sells (−21.6 → −22) | `int(...)` (truncate toward zero) | `trade_quantity(3920, 5000, 50) == -21` |
-| B5 | `plan` | Buys in input order, not by largest underweight | sort buys by `-diff` | cash-limited: BUY YYY 9 then BUY XXX 1 |
+## Planted bugs (5)
 
-The visible test `test_spec_example_as_listed` only checks sides and the first symbol, not quantities. It passes on buggy code. A strong candidate tightens it to the exact plan from the spec.
+### B1 · Cash buffer ignored
+- **Where:** `targets.py::target_values`: `investable = total` (`CASH_BUFFER` is imported only by the planner).
+- **Test:** model 50/50, $10,000 cash, prices $100 → BUY AAA 49, BUY BBB 49 (buggy 50 then 48).
 
-**Red herring:** the `MIN_TRADE_VALUE` check is correct and already in place.
+### B2 · Band measured against the holding's target
+- **Where:** `planner.py::plan`: `BAND * target`.
+- **Test:** CCC 5% target ($490), holding $700, total $10,000 → difference $210 < $500 → no CCC trade.
 
-## Follow-ups
-- Why must sells come first? (They fund buys; otherwise the cash limit truncates buys.)
-- Complexity: O(n log n) for sorting buys. Fine.
-- What if the band triggers but the rounding gives zero shares? (Skip: already handled by `qty == 0`.)
+### B3 · No sells-first / priority ordering
+- **Where:** `planner.py::plan`: iterates symbols alphabetically, so buys can run before sells and starve for cash.
+- **Test:** the example with the overweight symbol named ZZZ → first trade is SELL ZZZ, then BUY BBB 9.
+- **Fix:** collect candidates; sells first; buys sorted by `(-diff, symbol)`.
+
+### B4 · Floor overshoots on sells
+- **Where:** `planner.py::quantity`: `math.floor`.
+- **Test:** `quantity(3920, 5000, 50) == -21` (buggy −22).
+- **Fix:** `int(...)` (truncate toward zero).
+
+### B5 · Restricted weight not redistributed
+- **Where:** `targets.py::effective_weights`: drops restricted symbols without scaling up the rest (weights sum < 100%).
+- **Test:** model AAA 50 / BBB 25 / CCC 25, AAA restricted, $10,000 cash → BUY BBB 49, BUY CCC 49 (buggy 24 each).
+- **Fix:** divide remaining weights by their sum.
+
+Hints: (1) the spec sentence; (2) "one symbol, one rule per test".
+
+## Red herrings
+- Restricted holdings bypass the band (always sold): correct.
+- Minimum trade $100 check: correct.
+
+## Questions about the candidate's fixes (data structures)
+- **B3:** "You split candidates into sells and sorted buys: O(n log n). Could a heap help if cash runs out early?" (Pop the largest underweight until cash is gone; same complexity, stops early.)
+- **B5:** "Effective weights are recomputed every plan. When would you cache them per (model, restriction set)?" (Many accounts share the same model + restrictions → memoise with a frozenset key.)
+- **Prices:** "Prices are a dict symbol → price. What if a price is missing for one holding?" (Fail the whole plan vs skip: discuss safety.)
+- **General:** "Why Decimal for money but int for shares?"
+
+## Feature requests
+1. **"Tax-aware selling: prefer selling lots with losses; avoid short-term gains."** Strong answer: tax lots per holding; sell-lot selection policy; it changes only which lots, not how many shares.
+2. **"Drift alerts: notify when any holding drifts > 3% from target, even without trading."** Strong answer: reuse target values; a separate threshold; deduplicate alerts per day.
+3. **"Model changes: move 10,000 accounts to a new model without trading all on the same day."** Strong answer: batch scheduling; a transition model; order aggregation per symbol across accounts.
+
+## Scoring signals
+- **Strong:** notices that weights no longer sum to 100% after restriction; designs isolated scenarios per rule.
+- **Weak:** only re-runs the spec example and can't separate causes.

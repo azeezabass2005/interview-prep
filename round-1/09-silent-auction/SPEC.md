@@ -1,36 +1,46 @@
-# Charity Silent Auction
+# Charity Auction Platform
 
-A charity gala runs a sealed-bid auction. Bidders submit a private **maximum bid** per lot; the winner pays just enough
-to beat the runner-up. The code in `auction/` implements the rules below.
+A charity gala runs an online auction alongside the live event. Registered bidders place **maximum bids** on lots; the platform bids on
+their behalf (proxy bidding). Each lot closes at a scheduled time, with a soft-close extension. After the event every winning bidder gets
+one invoice. The repository contains the auction service.
 
-## Rules
+## Bidding
 
-- **Bidding window:** a lot accepts bids until it's **closed**. Bids after closing are rejected.
-- **Revisions:** a bidder may bid again on the same lot. **Only their latest bid counts**, even if it's lower.
-- **Winner:** the highest bid. Ties go to the bid placed **first**.
-- **Reserve:** a lot may have a reserve price. If the highest bid is below the reserve, the lot is **unsold**.
-- **Hammer price** (what the winner pays the charity):
-  - runner-up's bid **+ $5 increment**,
-  - but **never more than the winner's own bid**,
-  - and **never less than the reserve** (or the **$10 opening price** for lots with no reserve).
-  - With only one bid, there's no runner-up: the floor (reserve or opening price) applies.
-- **Invoice:** hammer price plus a **10% buyer's premium**, rounded half-up to the cent.
+- A bid is a bidder's **maximum** for a lot. A bidder may raise their maximum later; a new bid **lower than or equal to** their current maximum is rejected.
+- Bids are accepted only before the lot's **closing time**.
+- **Soft close:** a bid placed in the **last 2 minutes** before closing moves the closing time to **2 minutes after that bid**.
 
-## Examples
+## Current price and winner
 
-| Reserve | Bids (in order) | Winner | Hammer | Invoice |
-|---|---|---|---|---|
-| $100 | A $150, B $180, C $175 | B | $180 (175 + 5, capped at B's 180) | $198.00 |
-| $100 | A $200, B $120 | A | $125 | $137.50 |
-| $100 | A $90 | none (unsold) | n/a | n/a |
+- The **winner** is the bidder with the highest maximum. If two maximums are equal, the one placed **first** wins.
+- The **current price** is the runner-up's maximum **plus one increment**, but never more than the winner's maximum and never less than
+  the lot's **opening price**. With a single bidder, the price is the opening price.
+- The **increment depends on the runner-up's maximum**:
 
-## Candidate questions
+| Runner-up's maximum | Increment |
+|---|---|
+| under $100 | $5 |
+| $100 – $499.99 | $10 |
+| $500 and above | $25 |
 
-1. Identify anything in the rules that must be clarified before implementation.
-2. Explain how you would model lots, bids and results.
-3. Outline the winner and price calculation and the tests you would want.
-4. Identify bugs or issues and fix them.
+- At closing, if the lot has a **reserve** and the final price is below it, the lot is unsold.
 
-```
-python -m unittest discover -s tests -v
-```
+## Invoices
+
+- The winner pays the **hammer price** (the final current price) plus a **10% buyer's premium** on the hammer price, rounded half-up to the cent.
+- One invoice per bidder covers all lots they won.
+- Each lot has a **fair market value (FMV)**. The tax-deductible donation for a lot is **hammer − FMV**, never below zero.
+
+## Data model
+
+| Entity | Fields |
+|---|---|
+| Lot | lot id, title, opening price, reserve (optional), FMV, closes at |
+| Bidder | paddle number, name |
+| Bid | lot, paddle, maximum, placed at, sequence |
+| Invoice | paddle, lines (lot, hammer, premium, deductible), total |
+
+## Example
+
+Lot opening $50, FMV $100. Bids: A max $150, then B max $180, then C max $175.
+Winner B; runner-up C ($175 → increment $10) → price min(185, 180) = **$180**. Invoice: 180 + 18 premium = **$198.00**; deductible $80.

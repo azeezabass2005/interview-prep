@@ -12,7 +12,6 @@ TUESDAY = datetime(2026, 5, 5)
 
 
 class TempDb:
-    """A fresh SQLite file per test; several services can share it, like several instances."""
 
     def __init__(self):
         self._dir = tempfile.TemporaryDirectory()

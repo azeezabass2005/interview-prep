@@ -11,7 +11,6 @@ from .quiet_hours import deliver_after
 
 
 class Evaluator:
-    """Consumes price ticks; one evaluator process per partition of symbols."""
 
     def __init__(self, db: Database, clock):
         self._alerts = AlertRepository(db)
@@ -31,7 +30,6 @@ class Evaluator:
         return alert.threshold * (1 + REARM_FRACTION)
 
     def on_tick(self, symbol: str, price) -> int:
-        """Returns the number of deliveries enqueued."""
         price = Decimal(str(price))
         enqueued = 0
         for alert in self._index.for_symbol(symbol.upper()):

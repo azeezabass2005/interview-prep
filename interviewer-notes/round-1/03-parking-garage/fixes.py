@@ -1,13 +1,13 @@
 FIXES = [
-    ("garage/pricing.py", "    hours = -(-minutes // 60)  # started hours\n    return min(hours * HOURLY_CENTS, DAILY_MAX_CENTS)",
+    ("garage/services/pricing.py", "    return min(started_hours(minutes) * HOURLY_CENTS, DAILY_MAX_CENTS)",
      "    full_days, rest = divmod(minutes, MINUTES_PER_DAY)\n"
-     "    hours = -(-rest // 60)  # started hours\n"
-     "    return full_days * DAILY_MAX_CENTS + min(hours * HOURLY_CENTS, DAILY_MAX_CENTS)"),
-    ("garage/pricing.py", "    LOST_TICKET_CENTS,\n)", "    LOST_TICKET_CENTS,\n    MINUTES_PER_DAY,\n)"),
-    ("garage/pricing.py", "if minutes < GRACE_MINUTES:", "if minutes <= GRACE_MINUTES:"),
-    ("garage/pricing.py", "EARLY_BIRD_START_HOUR <= entry.hour <= EARLY_BIRD_END_HOUR", "EARLY_BIRD_START_HOUR <= entry.hour < EARLY_BIRD_END_HOUR"),
-    ("garage/pricing.py", "        return EARLY_BIRD_CENTS\n", "        return min(EARLY_BIRD_CENTS, _hourly_with_cap(minutes))\n"),
-    ("garage/tickets.py", "        ticket = self._tickets[ticket_id]\n",
-     "        ticket = self._tickets[ticket_id]\n        if ticket.exited_at is not None:\n            raise ValueError(\"ticket already closed\")\n"),
-    ("garage/pricing.py", "and exit.hour <= EARLY_BIRD_EXIT_BEFORE_HOUR", "and exit.hour < EARLY_BIRD_EXIT_BEFORE_HOUR"),
+     "    return full_days * DAILY_MAX_CENTS + min(started_hours(rest) * HOURLY_CENTS, DAILY_MAX_CENTS)"),
+    ("garage/services/pricing.py", "LOST_TICKET_CENTS, VALIDATION_MINUTES)", "LOST_TICKET_CENTS, MINUTES_PER_DAY, VALIDATION_MINUTES)"),
+    ("garage/services/pricing.py", "    if minutes < GRACE_MINUTES:", "    if minutes <= GRACE_MINUTES:"),
+    ("garage/services/pricing.py", "EARLY_BIRD_FROM_HOUR <= entry.hour <= EARLY_BIRD_UNTIL_HOUR", "EARLY_BIRD_FROM_HOUR <= entry.hour < EARLY_BIRD_UNTIL_HOUR"),
+    ("garage/services/occupancy.py",
+     "            return counts[\"total\"] < PUBLIC_SPACES + RESERVED_SPACES\n        return counts[\"total\"] < PUBLIC_SPACES + RESERVED_SPACES",
+     "            return counts[\"total\"] < PUBLIC_SPACES + RESERVED_SPACES\n        return counts[\"public\"] < PUBLIC_SPACES"),
+    ("garage/services/gates.py", "if ticket.pass_holder and now.weekday() < 5 and not lost:",
+     "if ticket.pass_holder and ticket.entered_at.weekday() < 5 and not lost:"),
 ]

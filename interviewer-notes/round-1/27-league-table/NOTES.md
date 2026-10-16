@@ -1,31 +1,68 @@
-# 27 · League Table: interviewer notes
+# R1-27 · League Standings: Interviewer Guide
 
-Code: `league/table.py`. Shape: aggregation (a copy-paste bug), ordered tie-breakers, a sub-table computed only among tied teams, competition ranking, an input that is accepted but ignored.
+~200 lines in `league/`. One passing test (a points-only ordering). Bugs: an aggregation copy-paste, two tie-breaker bugs, competition
+ranking, and result corrections double counting.
+
+## Session plan (60 min)
+0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
-
-| Topic | Answer |
+| Question | Answer |
 |---|---|
-| H2H scope | Only matches **between the tied teams**. With 3+ tied teams, use the mini-table of all of them. |
-| H2H still level | Share the position. GD in H2H is not a further tie-breaker (keep it simple). |
+| H2H among 3+ tied teams | Mini-table of matches between all of them. |
+| H2H still level | Share the position (no further H2H criteria). |
+| Correction | Replaces the previous result for that fixture. |
+| Form with fewer than 5 matches | Show what exists. |
 | Deductions | Points only; can go negative. |
-| Teams with only postponed games | Appear with 0 played (as coded). |
-| Display order of shared positions | Alphabetical. |
 
-## Planted issues
+## Code map
+| Module | Responsibility |
+|---|---|
+| `services/fixtures.py` | Teams, fixtures, results, deductions |
+| `services/table.py` | Rows, ordering, H2H, positions, form |
+| `store.py`, `api.py`, `app.py` | Storage, facade, wiring |
 
-| ID | Location | What is wrong | Fix | Failing test |
-|---|---|---|---|---|
-| B1 | `build_rows` | `away.goals_against += r.away_goals` (copy-paste) | `+= r.home_goals` | A 2–1 B → B conceded 2, GD −1 |
-| B2 | `standings.level_key` | Goals scored before goal difference | `(-points, -gd, -gf)` | X (+5, 6 GF) above Y (+3, 9 GF) |
-| B3 | `_head_to_head_points` | Returns overall points, not the mini-table | sum points from matches among `group` only | spec example: Zeta above Alpha |
-| B4 | `standings` | Positions 1..n; no shared positions | competition ranking on (level_key, h2h) | two fully level teams → positions 1, 1, 3, 3 |
-| G1 | `build_rows` | `deductions` accepted and never applied | subtract from points | A −3 drops below B |
+## Planted bugs (5)
 
-**Note:** the spec example is the H2H test. It isn't in the visible suite. Because the alphabetical fallback would put Alpha first, B3 is invisible without it.
+### B1 · Away team concedes its own goals
+- **Where:** `table.py::build_rows`: `away.goals_against += r.away_goals`.
+- **Test:** A 2–1 B → B conceded 2, GD −1.
 
-**Red herring:** `setdefault` creating rows for postponed matches is intended (teams appear in the table).
+### B2 · Goals scored before goal difference
+- **Where:** `table.py::standings.level`.
+- **Test:** X beats Z 6–1 (+5, 6 GF); Y beats W 9–6 (+3, 9 GF) → X above Y.
 
-## Follow-ups
-- Why is `groupby` safe here? (The input is sorted by the same key, so it groups only adjacent equal keys.)
-- How would you test a 3-way H2H? (A mini-league where each beats one other: all level, so they share.)
+### B3 · Head-to-head uses overall points
+- **Where:** `table.py::head_to_head`.
+- **Test:** spec example → Cobras, Zeta, Alpha, Dynamo (the alphabetical fallback would put Alpha above Zeta).
+
+### B4 · No shared positions
+- **Where:** `table.py::standings`: `enumerate` positions.
+- **Test:** A 1–0 C, B 1–0 D (A and B never meet) → positions 1, 1, 3, 3.
+
+### B5 · Corrections double count
+- **Where:** `fixtures.py::record`: appends a second result for the same fixture.
+- **Test:** f1 entered 2–0, corrected to 0–2 → B 3 pts, A 0 pts, each played 1.
+- **Fix:** store results in a dict keyed by fixture id (or replace in place).
+
+Hints: (1) the spec sentence; (2) "construct the smallest league that shows it".
+
+## Red herrings
+- Deductions applied after aggregation: correct.
+- `groupby` over a list already sorted by the same key: correct.
+- Form ordering by fixture date: correct.
+
+## Questions about the candidate's fixes (data structures)
+- **B5:** "Results were a list; you made them a dict keyed by fixture. What do you gain and lose?" (O(1) replace, one result per fixture structurally guaranteed; you lose correction history: keep an audit list if needed.)
+- **B3:** "Your H2H scans all results per tied team: O(T × R). Better?" (Pre-index results by unordered team pair: `dict[frozenset({a, b})] → results`; the mini-table only touches pairs within the group.)
+- **Table:** "The whole table is rebuilt on every request: O(R + T log T). When would you maintain it incrementally, and what makes corrections tricky?" (Corrections need reversal of the old result.)
+- **Form:** "Form sorts all results per team request. Alternative?" (A per-team deque(maxlen=5) updated on entry; corrections complicate it again.)
+
+## Feature requests
+1. **"Fair play tie-breaker: fewer yellow/red cards ranks higher, after H2H."** Strong answer: cards on results; a new key in the ordering; the order of criteria stays data-driven.
+2. **"Live table during matchday: provisional results update positions every minute."** Strong answer: provisional vs final results; recompute cost; push updates only on change.
+3. **"Split season: after 22 rounds the league splits into top 6 and bottom 6 groups with separate tables."** Strong answer: positions are frozen at the split; group-specific fixtures; points carry over.
+
+## Scoring signals
+- **Strong:** turns the example into a test (finds B3), deliberately builds ties, tests a correction.
+- **Weak:** only distinct-points tables.

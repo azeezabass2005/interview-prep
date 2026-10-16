@@ -1,35 +1,50 @@
 import unittest
-from decimal import Decimal as D
 
-from tips.models import NightTips, Shift
-from tips.pool import distribute, pool_amount
+from tips.app import build_app
 
-
-def s(name, role, hours):
-    return Shift(name, role, D(str(hours)))
+DAY = "2026-03-04"
 
 
-EXAMPLE = [s("alice", "SERVER", 6), s("bob", "BARTENDER", 5), s("cara", "BUSSER", 4),
-           s("dan", "MANAGER", 8), s("eve", "HOST", 1.5)]
+def shift(api, who, role, start, end):
+    api.shift({"employee": who, "role": role, "start": f"{DAY}T{start}", "end": f"{DAY}T{end}"})
+
+
+def example():
+    api = build_app()
+    shift(api, "alice", "SERVER", "17:00", "23:00")
+    shift(api, "bob", "BARTENDER", "18:00", "23:00")
+    shift(api, "cara", "BUSSER", "18:00", "22:00")
+    shift(api, "dan", "MANAGER", "16:00", "23:59")
+    shift(api, "eve", "HOST", "17:00", "18:30")
+    api.declare({"day": DAY, "service": "DINNER", "card": "1000", "cash": "200"})
+    return api.distribute(DAY, "DINNER")[1]
 
 
 class HiddenTips(unittest.TestCase):
-    def test_B1_cash_tips_not_charged_fee(self):
-        self.assertEqual(pool_amount(NightTips(D("1000"), D("200"))), D("1170.00"))
+    def test_B1_cash_not_charged(self):
+        self.assertEqual(example()["alice"], "585.00")
 
-    def test_B2_managers_never_paid(self):
-        shares = distribute(NightTips(D("1000"), D("0")), EXAMPLE)
-        self.assertNotIn("dan", shares)
+    def test_B2_managers_excluded(self):
+        self.assertNotIn("dan", example())
 
-    def test_B3_exactly_two_hours_is_eligible(self):
-        shares = distribute(NightTips(D("100"), D("0")), [s("a", "SERVER", 5), s("c", "BUSSER", 2)])
-        self.assertIn("c", shares)
+    def test_B3_exactly_two_hours_eligible(self):
+        api = build_app()
+        shift(api, "a", "SERVER", "17:00", "22:00")
+        shift(api, "c", "BUSSER", "18:00", "20:00")
+        api.declare({"day": DAY, "service": "DINNER", "card": "0", "cash": "100"})
+        self.assertIn("c", api.distribute(DAY, "DINNER")[1])
 
-    def test_B4_multi_role_weights_add_up(self):
-        shifts = [s("fay", "BUSSER", 3), s("fay", "SERVER", 3), s("gus", "SERVER", 3)]
-        shares = distribute(NightTips(D("0"), D("100")), shifts)
-        self.assertEqual(shares, {"fay": D("60.00"), "gus": D("40.00")})
+    def test_B4_roles_add_up(self):
+        api = build_app()
+        shift(api, "fay", "BUSSER", "16:00", "19:00")
+        shift(api, "fay", "SERVER", "19:00", "22:00")
+        shift(api, "gus", "SERVER", "17:00", "20:00")
+        api.declare({"day": DAY, "service": "DINNER", "card": "0", "cash": "100"})
+        self.assertEqual(api.distribute(DAY, "DINNER")[1], {"fay": "60.00", "gus": "40.00"})
 
-    def test_B5_leftover_cents_by_largest_remainder(self):
-        shares = distribute(NightTips(D("0"), D("1")), [s("a", "SERVER", 2), s("b", "SERVER", 4)])
-        self.assertEqual(shares, {"a": D("0.33"), "b": D("0.67")})
+    def test_B5_hours_split_by_service(self):
+        api = build_app()
+        shift(api, "ann", "SERVER", "14:00", "22:00")
+        shift(api, "ben", "SERVER", "16:00", "22:00")
+        api.declare({"day": DAY, "service": "DINNER", "card": "0", "cash": "100"})
+        self.assertEqual(api.distribute(DAY, "DINNER")[1], {"ann": "50.00", "ben": "50.00"})

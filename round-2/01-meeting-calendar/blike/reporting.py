@@ -5,7 +5,6 @@ from .repositories.requests import RequestRepository
 
 
 def weekly_summary(requests: RequestRepository, week_start: datetime) -> dict:
-    """Counts by status and average score for requests created in the week (Mon 00:00 to next Mon)."""
     week_end = week_start + timedelta(days=7)
     in_week = [r for r in requests.all() if week_start <= r.created_at < week_end]
     by_status = Counter(r.status for r in in_week)

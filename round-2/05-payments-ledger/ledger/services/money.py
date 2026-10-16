@@ -2,7 +2,6 @@ from ..errors import InvalidAmount
 
 
 def parse_amount(text) -> int:
-    """'10.10' -> 1010 cents. Rejects non-positive amounts."""
     try:
         cents = int(float(text) * 100)
     except (TypeError, ValueError):

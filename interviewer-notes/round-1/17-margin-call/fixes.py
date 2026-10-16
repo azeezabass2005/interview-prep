@@ -1,13 +1,18 @@
 FIXES = [
-    ("margin/calc.py", "from decimal import ROUND_HALF_UP, Decimal", "from decimal import ROUND_CEILING, Decimal"),
-    ("margin/calc.py", "    base_value = sum((p.market_value for p in account.positions), ZERO)",
-     "    base_value = sum((p.market_value for p in account.positions if p.is_long), ZERO)"),
-    ("margin/calc.py", "p.market_value / base_value >= CONCENTRATION_LIMIT", "p.market_value / base_value > CONCENTRATION_LIMIT"),
-    ("margin/calc.py", "    return sum((p.market_value * (1 - cuts[p.symbol]) for p in account.positions if p.is_long), ZERO)",
-     "    longs = sum((p.market_value * (1 - cuts[p.symbol]) for p in account.positions if p.is_long), ZERO)\n"
-     "    return longs + max(account.cash, ZERO)"),
-    ("margin/calc.py", "abs(p.market_value) * SHORT_REQUIREMENT for p", "abs(p.market_value) * (1 + SHORT_REQUIREMENT) for p"),
-    ("margin/calc.py", "quantize(Decimal(\"1\"), rounding=ROUND_HALF_UP)", "quantize(Decimal(\"1\"), rounding=ROUND_CEILING)"),
-    ("margin/liquidation.py", "longs.sort(key=lambda p: (cuts[p.symbol], p.market_value))",
-     "longs.sort(key=lambda p: (-cuts[p.symbol], -p.market_value))"),
+    ("margin/services/valuation.py", "        base = sum((qty * p.price for _, qty, p in raw), ZERO)",
+     "        base = sum((qty * p.price for _, qty, p in raw if qty > 0), ZERO)"),
+    ("margin/services/valuation.py",
+     """                if p.on < run_date - timedelta(days=1):
+                    haircut += STALE_SURCHARGE
+                if base > 0 and mv / base > CONCENTRATION_LIMIT:
+                    haircut = max(haircut, CONCENTRATED_HAIRCUT)""",
+     """                if base > 0 and mv / base > CONCENTRATION_LIMIT:
+                    haircut = max(haircut, CONCENTRATED_HAIRCUT)
+                if p.on < run_date - timedelta(days=1):
+                    haircut += STALE_SURCHARGE"""),
+    ("margin/services/valuation.py", "abs(l.market_value) * SHORT_ADD_ON for l", "abs(l.market_value) * (1 + SHORT_ADD_ON) for l"),
+    ("margin/services/calls.py", "from decimal import ROUND_HALF_UP, Decimal", "from decimal import ROUND_CEILING, Decimal"),
+    ("margin/services/calls.py", "rounding=ROUND_HALF_UP) * CALL_ROUNDING", "rounding=ROUND_CEILING) * CALL_ROUNDING"),
+    ("margin/services/calls.py", "        deposited = sum((d.amount for d in self._store.deposits[account_id]), Decimal(\"0\"))",
+     "        deposited = sum((d.amount for d in self._store.deposits[account_id] if d.on >= call.issued_on), Decimal(\"0\"))"),
 ]

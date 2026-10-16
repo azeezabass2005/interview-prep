@@ -1,36 +1,54 @@
 import unittest
 
-from prizes.payouts import compute_payouts
-from prizes.pool import prize_pool
+from tourney.app import build_app
 
 
-def players(n):
-    return [f"p{i:03d}" for i in range(1, n + 1)]
+def field(n):
+    api, _ = build_app()
+    api.create("t")
+    names = [f"p{i:02d}" for i in range(n)]
+    for name in names:
+        api.enter("t", name)
+    api.start("t")
+    return api, names
 
 
-class HiddenPrizes(unittest.TestCase):
-    def test_B1_guarantee_is_floor_after_rake(self):
-        self.assertEqual(prize_pool(20), 200_000)
+class HiddenTourney(unittest.TestCase):
+    def test_B1_guarantee_after_rake(self):
+        api, _ = field(20)
+        self.assertEqual(api.pool("t")[1]["pool_cents"], 200_000)
 
-    def test_B2_ten_entries_pays_two(self):
-        field = players(10)
-        self.assertEqual(len(compute_payouts(field, [[p] for p in field])), 2)
+    def test_B2_ten_entries_pay_two(self):
+        api, names = field(10)
+        for hand, name in enumerate(names[1:], start=1):
+            api.eliminate("t", {"hand": hand, "eliminated": [name], "winners": [names[0]]})
+        prizes = api.finish("t")[1]["prizes"]
+        self.assertEqual(len([v for v in prizes.values() if v > 0]), 2)
 
-    def test_B3_tied_players_split_combined_places(self):
-        field = ["ana", "ben", "cy", "dee"] + players(16)
-        payouts = compute_payouts(field, [["ana"], ["ben", "cy"], ["dee"]])
-        pool = prize_pool(20)
-        expected = (pool * 30 // 100 + pool * 20 // 100) // 2
-        self.assertEqual(payouts["ben"], expected)
-        self.assertEqual(payouts["cy"], expected)
+    def test_B3_tied_players_split_places(self):
+        api, names = field(20)
+        winner, ben, cy, dee = names[0], names[1], names[2], names[3]
+        hand = 1
+        for name in names[4:]:
+            api.eliminate("t", {"hand": hand, "eliminated": [name], "winners": [winner]})
+            hand += 1
+        api.eliminate("t", {"hand": hand, "eliminated": [dee], "winners": [winner]})
+        api.eliminate("t", {"hand": hand + 1, "eliminated": [ben, cy], "winners": [winner]})
+        result = api.finish("t")[1]
+        self.assertEqual((result["prizes"][ben], result["prizes"][cy]), (50_000, 50_000))
+        self.assertEqual(sum(result["prizes"].values()), result["pool_cents"])
 
-    def test_B4_finisher_after_tie_is_placed_after_it(self):
-        field = ["ana", "ben", "cy", "dee"] + players(16)
-        payouts = compute_payouts(field, [["ana"], ["ben", "cy"], ["dee"]])
-        self.assertEqual(payouts.get("dee", 0), 0)
+    def test_B4_at_most_two_reentries(self):
+        api, names = field(3)
+        for hand in range(1, 4):
+            api.eliminate("t", {"hand": hand, "eliminated": ["p02"], "winners": ["p00"]})
+            status = api.enter("t", "p02")[0]
+            self.assertEqual(status, 201 if hand < 3 else 409)
 
-    def test_B5_payouts_add_up_to_pool(self):
-        field = players(61)
-        payouts = compute_payouts(field, [[p] for p in field])
-        self.assertEqual(sum(payouts.values()), 301_950)
-        self.assertEqual(payouts["p001"], 120_781)
+    def test_B5_late_registration_through_level_6(self):
+        api, _ = field(3)
+        for _ in range(5):
+            api.next_level("t")
+        self.assertEqual(api.enter("t", "late6")[0], 201)
+        api.next_level("t")
+        self.assertEqual(api.enter("t", "late7")[0], 409)

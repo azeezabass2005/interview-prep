@@ -3,7 +3,6 @@ from collections import Counter
 
 
 class Metrics:
-    """Process-local counters scraped by monitoring."""
 
     def __init__(self):
         self._lock = threading.Lock()

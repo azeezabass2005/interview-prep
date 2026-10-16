@@ -32,7 +32,6 @@ class Worker:
             raise LeaseLost(f"job {job.job_id} lease lost")
 
     def poll_once(self) -> Optional[int]:
-        """Lease and run at most one job. Returns the job id it ran, or None."""
         now = self._clock.now()
         candidate = self._jobs.next_candidate(now)
         if candidate is None:
@@ -42,7 +41,7 @@ class Worker:
         job = self._jobs.get(candidate.job_id)
         try:
             self._registry.get(job.kind)(job.payload, JobContext(self, job))
-        except Exception as exc:  # handler failures are expected; record them
+        except Exception as exc:
             self._on_failure(job, exc)
             return job.job_id
         self._jobs.complete(job.job_id, self.worker_id)

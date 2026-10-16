@@ -1,48 +1,63 @@
 import unittest
 from datetime import datetime
-from decimal import Decimal as D
 
-from tests.helpers import campaign
+from crowd.app import build_app
+from crowd.payments import FakePayments
+
+
+class FakeClock:
+    def __init__(self):
+        self.current = datetime(2026, 6, 1)
+
+    def now(self):
+        return self.current
+
+
+def campaign(deluxe_limit=50, failing=()):
+    clock = FakeClock()
+    payments = FakePayments(failing)
+    api, _ = build_app(clock, payments)
+    api.create({"id": "c", "goal": "1000", "deadline": "2026-07-01T00:00",
+                "tiers": [{"name": "STANDARD", "minimum": "35"}, {"name": "DELUXE", "minimum": "100", "limit": deluxe_limit}]})
+    return api, clock, payments
+
+
+def settle(api, clock):
+    clock.current = datetime(2026, 7, 1)
+    return api.settle("c")[1]
 
 
 class HiddenCrowd(unittest.TestCase):
-    def test_B1_tier_limit_is_exact(self):
-        _, c = campaign(deluxe_limit=2)
-        c.pledge("a", "DELUXE", "100")
-        c.pledge("b", "DELUXE", "100")
-        with self.assertRaises(Exception):
-            c.pledge("c", "DELUXE", "100")
+    def test_B1_tier_limit_exact(self):
+        api, _, _ = campaign(deluxe_limit=2)
+        api.pledge("c", {"backer": "a", "tier": "DELUXE", "amount": "100"})
+        api.pledge("c", {"backer": "b", "tier": "DELUXE", "amount": "100"})
+        self.assertEqual(api.pledge("c", {"backer": "x", "tier": "DELUXE", "amount": "100"})[0], 409)
 
-    def test_B2_cancelled_pledges_do_not_count(self):
-        _, c = campaign()
-        c.pledge("a", "DELUXE", "900")
-        p = c.pledge("b", "DELUXE", "200")
-        c.cancel(p.pledge_id)
-        self.assertFalse(c.close().funded)
+    def test_B2_cancelled_pledges_ignored(self):
+        api, clock, payments = campaign()
+        api.pledge("c", {"backer": "a", "tier": "DELUXE", "amount": "900"})
+        pid = api.pledge("c", {"backer": "b", "tier": "DELUXE", "amount": "200"})[1]["pledge_id"]
+        api.cancel("c", pid)
+        self.assertFalse(settle(api, clock)["funded"])
+        self.assertEqual(payments.charges, [])
 
-    def test_B3_reaching_goal_exactly_funds(self):
-        _, c = campaign()
-        c.pledge("a", "DELUXE", "1000")
-        self.assertTrue(c.close().funded)
+    def test_B3_goal_reached_exactly(self):
+        api, clock, _ = campaign()
+        api.pledge("c", {"backer": "a", "tier": "DELUXE", "amount": "1000"})
+        self.assertTrue(settle(api, clock)["funded"])
 
-    def test_B4_no_fees_when_not_funded(self):
-        _, c = campaign()
-        c.pledge("a", "STANDARD", "500")
-        outcome = c.close()
-        self.assertEqual((outcome.platform_fee, outcome.processing_fee), (D("0.00"), D("0.00")))
-
-    def test_B5_spec_example_payout(self):
-        _, c = campaign()
+    def test_B4_fee_only_for_successful_charges(self):
+        api, clock, _ = campaign(failing={"s0"})
         for i in range(20):
-            c.pledge(f"s{i}", "STANDARD", "35")
+            api.pledge("c", {"backer": f"s{i}", "tier": "STANDARD", "amount": "35"})
         for i in range(5):
-            c.pledge(f"d{i}", "DELUXE", "100")
-        outcome = c.close()
-        self.assertEqual(outcome.processing_fee, D("41.00"))
-        self.assertEqual(outcome.payout, D("1099.00"))
+            api.pledge("c", {"backer": f"d{i}", "tier": "DELUXE", "amount": "100"})
+        result = settle(api, clock)
+        self.assertEqual((result["collected"], result["payout"]), ("1165.00", "1067.00"))
 
-    def test_G1_no_pledges_after_deadline(self):
-        clock, c = campaign()
-        clock.current = datetime(2026, 7, 1, 0, 1)
-        with self.assertRaises(Exception):
-            c.pledge("late", "STANDARD", "35")
+    def test_B5_cannot_change_into_sold_out_tier(self):
+        api, _, _ = campaign(deluxe_limit=1)
+        api.pledge("c", {"backer": "ann", "tier": "DELUXE", "amount": "100"})
+        pid = api.pledge("c", {"backer": "bob", "tier": "STANDARD", "amount": "35"})[1]["pledge_id"]
+        self.assertEqual(api.change("c", pid, {"tier": "DELUXE", "amount": "100"})[0], 409)

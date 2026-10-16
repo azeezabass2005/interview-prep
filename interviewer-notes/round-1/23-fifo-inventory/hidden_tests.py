@@ -1,52 +1,36 @@
 import unittest
-from datetime import date
-from decimal import Decimal as D
 
-from inventory.ledger import Inventory
-
-JAN1, JAN5, JAN9 = date(2026, 1, 1), date(2026, 1, 5), date(2026, 1, 9)
+from inventory.app import build_app
 
 
 class HiddenInventory(unittest.TestCase):
     def setUp(self):
-        self.inv = Inventory()
+        self.api, self.store = build_app()
 
-    def test_B1_oldest_layers_first(self):
-        self.inv.receive("W", 100, "2.00", JAN1)
-        self.inv.receive("W", 50, "2.50", JAN5)
-        self.assertEqual(self.inv.ship("S1", "W", 120).cogs, D("250.00"))
+    def test_B1_oldest_first(self):
+        self.api.receive("W", "NJ", 100, "2.00", "2026-01-01")
+        self.api.receive("W", "NJ", 50, "2.50", "2026-01-05")
+        self.assertEqual(self.api.ship("S1", "W", "NJ", 50)[1]["cogs"], "100.00")
 
-    def test_B2_rejected_shipment_changes_nothing(self):
-        self.inv.receive("W", 10, "2.00", JAN1)
-        with self.assertRaises(Exception):
-            self.inv.ship("S1", "W", 15)
-        self.assertEqual(self.inv.on_hand("W"), 10)
+    def test_B2_short_shipment_changes_nothing(self):
+        self.api.receive("W", "NJ", 10, "2.00", "2026-01-01")
+        self.assertEqual(self.api.ship("S1", "W", "NJ", 15)[0], 409)
+        self.assertEqual(self.api.value("W", "NJ")[1]["on_hand"], 10)
 
     def test_B3_partial_layer_keeps_remainder(self):
-        self.inv.receive("W", 100, "2.00", JAN1)
-        self.inv.ship("S1", "W", 30)
-        self.assertEqual(self.inv.valuation("W"), D("140.00"))
+        self.api.receive("W", "NJ", 100, "2.00", "2026-01-01")
+        self.api.ship("S1", "W", "NJ", 30)
+        self.assertEqual(self.api.value("W", "NJ")[1]["value"], "140.00")
 
-    def test_B4_return_at_shipment_average_cost(self):
-        self.inv.receive("W", 100, "2.00", JAN1)
-        self.inv.ship("S1", "W", 40)
-        self.inv.receive("W", 10, "3.00", JAN5)
-        layer = self.inv.return_units("S1", 5, JAN9)
-        self.assertEqual(layer.unit_cost, D("2.0000"))
+    def test_B4_transfers_keep_received_date(self):
+        self.api.receive("W", "NJ", 10, "1.00", "2026-01-01")
+        self.api.receive("W", "NY", 10, "5.00", "2026-02-01")
+        self.api.receive("W", "NY", 10, "7.00", "2026-04-01")
+        self.api.transfer("W", "NJ", "NY", 10, "2026-03-01")
+        self.assertEqual(self.api.ship("S1", "W", "NY", 10)[1]["cogs"], "10.00")
 
-    def test_B5_skus_do_not_share_layers(self):
-        self.inv.receive("A", 10, "1.00", JAN1)
-        self.inv.receive("B", 10, "5.00", JAN1)
-        self.assertEqual(self.inv.ship("S1", "B", 5).cogs, D("25.00"))
-        other = Inventory()
-        other.receive("B", 10, "5.00", JAN1)
-        other.receive("A", 10, "1.00", JAN1)
-        self.assertEqual(other.ship("S2", "B", 5).cogs, D("25.00"))
-        self.assertEqual(other.on_hand("A"), 10)
-
-    def test_spec_example(self):
-        self.inv.receive("W", 100, "2.00", JAN1)
-        self.inv.receive("W", 50, "2.50", JAN5)
-        self.inv.ship("S1", "W", 120)
-        self.inv.return_units("S1", 10, JAN9)
-        self.assertEqual(self.inv.valuation("W"), D("95.83"))
+    def test_B5_return_at_shipment_average(self):
+        self.api.receive("W", "NJ", 100, "2.00", "2026-01-01")
+        self.api.ship("S1", "W", "NJ", 40)
+        self.api.receive("W", "NJ", 10, "3.00", "2026-01-05")
+        self.assertEqual(self.api.return_units("S1", 5, "2026-01-09")[1]["unit_cost"], "2.0000")

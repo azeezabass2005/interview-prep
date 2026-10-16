@@ -1,31 +1,33 @@
-# Fitness Class Booking
+# Fitness Studio Booking
 
-A gym's app lets members book spots in classes. When a class is full, members join a **waitlist** and are promoted automatically
-when someone cancels. The code in `classes/` implements the rules below. Members report being skipped on the waitlist and charged unfairly.
+A fitness studio sells memberships and runs classes with limited spots. Members book spots; when a class is full they join a **waitlist**
+and may be promoted automatically. The repository contains the booking service.
 
-## Rules
+## Memberships
 
-- Each class has a **capacity** and a **start time**.
-- **Booking:** if there's space the member is **BOOKED**; otherwise they join the **waitlist** (**WAITLISTED**).
-  The waitlist holds at most **10** members; beyond that, booking is rejected.
-- A member can't hold more than one place in a class (booked **or** waitlisted).
-- **Waitlist order:** **premium** members are ahead of standard members. Within each group, first come, first served.
-- **Cancelling a booking** frees the spot, and the **first member on the waitlist is promoted** to BOOKED automatically,
-  **except in the last hour before the class starts**. Then the spot stays open and nobody is promoted.
-- **Late-cancel fee:** cancelling a **booking** less than **12 hours** before the class costs **$10**. Leaving the waitlist is always free.
+- **UNLIMITED:** book any number of classes. **PREMIUM** is UNLIMITED with waitlist priority.
+- **PACK:** a pack of class **credits**. Booking a spot uses 1 credit. Joining a waitlist uses no credit; the credit is used if and when the
+  member is promoted.
+
+## Booking and waitlist
+
+- If a class has space, the member is **BOOKED**; otherwise they join the waitlist (at most **10** people), unless they're a PACK member with
+  no credits left (rejected).
+- A member can hold only one place in a class (booked or waitlisted).
+- **Waitlist order:** PREMIUM members first; within each group, first come, first served.
+
+## Cancellation
+
+- Cancelling a booking **12 hours or more** before the class is free (PACK members get their credit back).
+- Cancelling **less than 12 hours** before: UNLIMITED/PREMIUM members pay a **$10** late fee; PACK members **forfeit the credit** (no fee).
+- Leaving the waitlist is always free.
+
+## Promotion
+
+When a booked spot frees up, the first eligible person on the waitlist is promoted automatically, **except in the last hour before the
+class**. A PACK member with no credits left is skipped (they stay on the waitlist). Promoted members leave the waitlist.
 
 ## Example
 
-Capacity 1. Ana books (BOOKED). Sam (standard) joins the waitlist, then Pia (premium) joins the waitlist.
-Waitlist order: **Pia, Sam**. Ana cancels 20 hours before class: no fee, **Pia is promoted**.
-
-## Candidate questions
-
-1. Identify anything in the rules that must be clarified before implementation.
-2. Explain how you would model classes, bookings and the waitlist, and which data structure you'd use for the waitlist.
-3. Outline booking/cancellation behaviour and the tests you would want.
-4. Identify bugs or issues and fix them.
-
-```
-python -m unittest discover -s tests -v
-```
+Capacity 1. Ana (UNLIMITED) books. Sam (UNLIMITED) and Pia (PREMIUM) join the waitlist in that order → waitlist **Pia, Sam**.
+Ana cancels 20 h before → no fee, **Pia is promoted**.

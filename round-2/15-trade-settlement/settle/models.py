@@ -10,7 +10,7 @@ class Trade:
     account: str
     security: str
     asset_class: str
-    side: str  # BUY / SELL
+    side: str
     quantity: int
     price: Decimal
     trade_date: date
@@ -26,7 +26,7 @@ class Confirm:
     trade_id: str
     side: str
     quantity: int
-    price: str  # as received from the broker
+    price: str
 
 
 @dataclass(frozen=True)

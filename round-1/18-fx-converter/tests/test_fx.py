@@ -1,36 +1,24 @@
 import unittest
-from decimal import Decimal as D
+from datetime import datetime
 
-from fx.convert import Converter, spread_for
-from tests.helpers import standard_book
-
-
-class TestSpread(unittest.TestCase):
-    def test_tiers(self):
-        self.assertEqual(spread_for(D("500")), D("0.0100"))
-        self.assertEqual(spread_for(D("10000")), D("0.0050"))
-        self.assertEqual(spread_for(D("250000")), D("0.0025"))
+from fx.app import build_app
 
 
-class TestQuotes(unittest.TestCase):
-    def setUp(self):
-        _, book = standard_book()
-        self.fx = Converter(book)
+class FakeClock:
+    def __init__(self):
+        self.current = datetime(2026, 4, 1, 12, 0, 0)
 
-    def test_eur_to_usd(self):
-        self.assertEqual(self.fx.quote(D("1000"), "EUR", "USD").target_amount, D("1074.15"))
+    def now(self):
+        return self.current
 
-    def test_gbp_to_eur_cross(self):
-        q = self.fx.quote(D("1000"), "GBP", "EUR")
-        self.assertEqual(q.target_amount, D("1158.80"))  # 1270 / 1.085 = 1170.5069... × 0.99
 
-    def test_rejects_non_positive(self):
-        with self.assertRaises(ValueError):
-            self.fx.quote(D("0"), "EUR", "USD")
-
-    def test_unknown_currency(self):
-        with self.assertRaises(KeyError):
-            self.fx.quote(D("10"), "EUR", "BRL")
+class TestFx(unittest.TestCase):
+    def test_eur_to_usd_quote_and_book(self):
+        api = build_app(FakeClock())
+        api.publish("EURUSD", "1.0850")
+        status, quote = api.quote({"customer": "c1", "source": "EUR", "amount": "1000", "target": "USD"})
+        self.assertEqual((status, quote["target_amount"]), (201, "1074.15"))
+        self.assertEqual(api.book(quote["quote_id"])[0], 201)
 
 
 if __name__ == "__main__":

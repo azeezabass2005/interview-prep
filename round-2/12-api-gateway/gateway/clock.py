@@ -1,5 +1,4 @@
 class FakeClock:
-    """Epoch seconds (float)."""
 
     def __init__(self, t: float):
         self.t = t

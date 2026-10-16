@@ -1,31 +1,69 @@
-# 26 · Parcel Shipping Rates: interviewer notes
+# R1-26 · Checkout Shipping: Interviewer Guide
 
-Code: `ship/`. Shape: rounding at the right step (each dimension up, then weight up), max of two measures, strict threshold, the surcharge base, a free-shipping rule with two conditions.
+~180 lines in `shipping/` plus two rate tables. One passing test (a small commercial box). Two carriers mean every rule is applied twice;
+candidates should parameterise tests by carrier.
+
+## Session plan (60 min)
+0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
-
-| Topic | Answer |
+| Question | Answer |
 |---|---|
-| Round dims before multiplying? | Yes, each dimension up to a whole inch first. |
-| Weight rounding | Always up: 6.01 lb → 7. |
-| Exactly 48 in | Not oversize ("more than 48"). |
-| Fuel base | Base + oversize only. Residential is added after. |
-| Free shipping zones | 1–4 only. Subtotal after discounts, ≥ $75. |
-| Zero-weight / tiny boxes | Billable at least 1 lb (already handled). |
+| Round dims first? | Yes, each dimension up, then multiply. |
+| Weight rounding | Always up: 6.01 → 7. |
+| Exactly 48 in | Not oversize. |
+| Carrier tie | SPEEDY. |
+| Free shipping subtotal | After discounts; ≥ $75; zones 1–4 only. |
+| Exactly 14:00 | Next business day ("at or after"). |
 
-## Planted issues
+## Code map
+| Module | Responsibility |
+|---|---|
+| `services/weights.py` | Dimensional and billable weight per carrier |
+| `services/rating.py` | Package and order rates |
+| `services/checkout.py` | Parsing, rate shopping, free shipping, estimate wiring |
+| `services/estimate.py` | Ship date and delivery date |
+| `manifest.py`, `api.py`, `app.py`, `config.py` | Pickup manifest (unused by checkout), facade, rate tables |
 
-| ID | Location | What is wrong | Fix | Failing test |
-|---|---|---|---|---|
-| B1 | `parcel.py::dimensional_weight` | Dimensions not rounded up first | ceil each dimension | 9.1 × 10 × 10, 1 lb → billable 8 (buggy 7) |
-| B2 | `parcel.py::billable_weight` | `ROUND_HALF_UP` instead of always up | `ROUND_CEILING` | 6 × 6 × 6, 6.2 lb → 7 |
-| B3 | `quote.py::package_cost` | Fuel surcharge includes the residential fee | fuel on base + oversize | spec example → 21.97 (buggy 22.51) |
-| B4 | `quote.py::package_cost` | `>= 48` | `> 48` | 48 × 2 × 2, 1 lb, zone 1, commercial → 6.16 (no $15 fee) |
-| B5 | `quote.py::order_shipping` | `discount` parameter ignored | `subtotal - discount >= threshold` | subtotal 80, discount 10 → charged |
-| G1 | `quote.py::order_shipping` | Zone limit for free shipping missing (`FREE_SHIPPING_MAX_ZONE` unused) | require `zone <= 4` | subtotal 120, zone 6 → charged |
+## Planted bugs (5)
 
-The visible test `test_dim_weight_dominates` (57.55 → 58) passes on buggy code because 57.55 rounds up under half-up too. Ask: "Does this test prove the rounding rule?"
+### B1 · Dimensions not rounded up first
+- **Where:** `weights.py::dimensional_weight`.
+- **Test:** 11.2 × 10 × 10, 1 lb, zone 1 SPEEDY → 12 × 10 × 10 / 139 = 8.63 → 9 lb → **$10.08** (buggy 8 lb → $9.52).
 
-## Follow-ups
-- Why are rates a dict keyed by zone rather than ranges? (Simple and explicit; ranges are easy to get off by one.)
-- Multi-package orders: is free shipping per order or per package? (Per order.)
+### B2 · Billable weight rounded half-up
+- **Where:** `weights.py::billable_weight`: `ROUND_HALF_UP`.
+- **Test:** 6 × 6 × 6, 6.2 lb, zone 1 SPEEDY → 7 lb → **$8.96**.
+
+### B3 · Fuel charged on the residential fee
+- **Where:** `rating.py::package_rate`.
+- **Test:** the spec example → **$21.97** (buggy $22.51).
+
+### B4 · Free shipping ignores the discount
+- **Where:** `checkout.py::quote`: compares `subtotal` (the `discount` parameter is unused).
+- **Test:** subtotal $80, discount $10, zone 2 → shipping is charged.
+
+### B5 · Orders at exactly 14:00 ship the same day
+- **Where:** `estimate.py::ship_date`: `hour > CUTOFF_HOUR`.
+- **Test:** order Tue 14:00 → ships Wed → SPEEDY delivery **Fri**.
+
+Hints: (1) the spec sentence; (2) "which parameter or constant is unused?" (B4).
+
+## Red herrings
+- Oversize `>` 48: correct.
+- Rate shopping tie-break toward SPEEDY: correct.
+
+## Questions about the candidate's fixes (data structures)
+- **Rating:** "Each package is rated by every carrier: O(P × C). With 10 carriers and 1,000 packages?" (Still fine; but cache by (dims, weight, zone, carrier) if packages repeat: memoisation keyed by a frozen dataclass.)
+- **Rate tables:** "Zones are a dict. Why is a dict better than a list indexed by zone here?" (Sparse/irregular keys, explicit lookups, clear failure for unknown zones.)
+- **Estimate:** "`next_business_day` loops. Holidays added later: what structure?" (A set of holidays; for long transit times, arithmetic on weeks plus bisect over a sorted holiday list.)
+- **Manifest:** "Entries keyed by (date, carrier) in a defaultdict. `carriers_on` scans all keys: index alternative?" (A nested dict date → carrier → rows.)
+
+## Feature requests
+1. **"Box packing: given items with dimensions, choose boxes from a catalog to minimise shipping cost."** Strong answer: NP-hard in general, so propose a heuristic (first-fit decreasing by volume), then rate the result; tests on small exact cases.
+2. **"Per-package carrier choice (split carriers within an order)."** Strong answer: rate shopping per package; the estimate is the latest delivery across packages; manifest per carrier.
+3. **"Saturday delivery option for SPEEDY at +$12."** Strong answer: business-day definition becomes carrier/service-specific; price and estimate both change.
+
+## Scoring signals
+- **Strong:** tests both carriers; picks values near rounding boundaries; notices the unused `discount` parameter.
+- **Weak:** only checks which carrier wins.

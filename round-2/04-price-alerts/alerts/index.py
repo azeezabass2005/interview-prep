@@ -7,7 +7,6 @@ from .repositories.alerts import AlertRepository
 
 
 class AlertIndex:
-    """Per-process index of active alerts by symbol. Refreshed from the DB every INDEX_REFRESH_SECONDS."""
 
     def __init__(self, alerts: AlertRepository, clock):
         self._alerts = alerts

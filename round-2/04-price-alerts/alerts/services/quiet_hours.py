@@ -16,7 +16,6 @@ def in_quiet_hours(user: User, utc_now: datetime) -> bool:
 
 
 def deliver_after(user: User, utc_now: datetime) -> datetime:
-    """When a notification created at utc_now may be delivered."""
     if not in_quiet_hours(user, utc_now):
         return utc_now
     tz = ZoneInfo(user.timezone)

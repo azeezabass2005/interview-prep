@@ -1,37 +1,34 @@
 import unittest
-from decimal import Decimal as D
 
-from utility.billing import SolarAccount
-from tests.helpers import reading
+from utility.app import build_app
 
 
-class HiddenSolar(unittest.TestCase):
-    def test_B1_tiers_on_net_usage(self):
-        self.assertEqual(SolarAccount("A").bill(reading(1, 700, 100)).total, D("90.75"))
+def bills(*readings):
+    api = build_app()
+    first = readings[0]
+    api.open({"account_id": "A", "read_on": first[0], "import": first[1], "export": first[2]})
+    return api, [api.read("A", {"read_on": d, "import": i, "export": e})[1] for d, i, e in readings[1:]]
 
-    def test_B2_bank_offsets_kwh_before_tiers(self):
-        account = SolarAccount("A")
-        account.bill(reading(5, 300, 450))
-        self.assertEqual(account.bill(reading(6, 900, 100)).total, D("98.63"))
 
-    def test_B3_fixed_charge_not_taxed(self):
-        self.assertEqual(SolarAccount("A").bill(reading(5, 300, 450)).total, D("12.00"))
+class HiddenUtility(unittest.TestCase):
+    def test_B1_register_rollover(self):
+        _, out = bills(("2026-03-01", 99_900, 0), ("2026-03-31", 300, 0))
+        self.assertEqual(out[0]["imported"], 400)
 
-    def test_B4_bank_is_consumed(self):
-        account = SolarAccount("A")
-        account.bill(reading(5, 300, 450))
-        account.bill(reading(6, 900, 100))
-        self.assertEqual(account.bill(reading(7, 300)).total, D("49.80"))
+    def test_B2_tiers_scale_with_period(self):
+        _, out = bills(("2026-03-01", 0, 0), ("2026-03-16", 400, 0))
+        self.assertEqual(out[0]["energy"], "52.50")
 
-    def test_G1_december_true_up(self):
-        account = SolarAccount("A")
-        account.bill(reading(11, 100, 300))
-        december = account.bill(reading(12, 50, 50))
-        self.assertEqual(december.true_up_payout, D("8.00"))
-        self.assertEqual(account.bank_kwh, 0)
+    def test_B3_bank_is_consumed(self):
+        _, out = bills(("2026-04-01", 0, 0), ("2026-05-01", 300, 450), ("2026-05-31", 700, 450),
+                       ("2026-06-30", 1000, 450))
+        self.assertEqual([b["billable_kwh"] for b in out], [0, 250, 300])
 
-    def test_G2_months_in_order(self):
-        account = SolarAccount("A")
-        account.bill(reading(5, 300))
-        with self.assertRaises(Exception):
-            account.bill(reading(3, 300))
+    def test_B4_service_charge_not_taxed(self):
+        _, out = bills(("2026-01-01", 10_000, 2_000), ("2026-01-31", 10_700, 2_100))
+        self.assertEqual(out[0]["total"], "90.75")
+
+    def test_B5_true_up_on_period_ending_in_december(self):
+        api, out = bills(("2026-10-15", 0, 0), ("2026-11-15", 100, 300), ("2026-12-15", 150, 350))
+        self.assertEqual(out[1]["true_up_payout"], "8.00")
+        self.assertEqual(api.bank("A")[1]["bank_kwh"], 0)

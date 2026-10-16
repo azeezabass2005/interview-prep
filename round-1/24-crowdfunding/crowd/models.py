@@ -1,6 +1,9 @@
 from dataclasses import dataclass, field
+from datetime import datetime
 from decimal import Decimal
-from typing import List, Optional
+from typing import Dict, Optional
+
+ACTIVE, CANCELLED, CHARGED, FAILED = "ACTIVE", "CANCELLED", "CHARGED", "FAILED"
 
 
 @dataclass(frozen=True)
@@ -16,18 +19,15 @@ class Pledge:
     backer: str
     tier: str
     amount: Decimal
-    cancelled: bool = False
+    status: str = ACTIVE
 
 
-@dataclass(frozen=True)
-class Outcome:
-    funded: bool
-    total: Decimal
-    platform_fee: Decimal
-    processing_fee: Decimal
-    payout: Decimal
-    charged: List[Pledge] = field(default_factory=list)
-
-
-class PledgeRejected(Exception):
-    pass
+@dataclass
+class Campaign:
+    campaign_id: str
+    goal: Decimal
+    deadline: datetime
+    tiers: Dict[str, Tier]
+    pledges: Dict[int, Pledge] = field(default_factory=dict)
+    settled: bool = False
+    result: Optional[dict] = None

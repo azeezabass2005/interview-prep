@@ -7,7 +7,6 @@ class SystemClock:
 
 
 class FakeClock:
-    """Always returns timezone-aware UTC datetimes."""
 
     def __init__(self, now: datetime):
         self.current = now

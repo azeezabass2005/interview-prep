@@ -4,7 +4,6 @@ from .models import MeetingRequest
 
 
 class Notifier:
-    """Writes emails to the outbox table; a separate mailer process sends them."""
 
     def __init__(self, db: Database, clock):
         self._db = db

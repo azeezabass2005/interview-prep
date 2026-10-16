@@ -1,25 +1,15 @@
-"""Reference minimal fixes: (path, old, new) replacements applied to the exercise."""
 FIXES = [
-    ("potluck/drawing.py",
-     'return str(self._rng.randint(0, 10 ** CODE_LENGTH - 1))',
-     'return f"{self._rng.randint(0, 10 ** CODE_LENGTH - 1):0{CODE_LENGTH}d}"'),
-    ("potluck/matching.py",
-     'return sum(1 for digit in entry_code if digit in winning_code)',
-     'return sum(1 for a, b in zip(entry_code, winning_code) if a == b)'),
-    ("potluck/payouts.py",
-     'for tier in sorted(winners_by_tier):',
-     'for tier in sorted(winners_by_tier, reverse=True):'),
-    ("potluck/drawing.py",
-     'return SPONSOR_SEED_CENTS + ENTRY_FEE_CENTS * len(self._entries)',
-     'return SPONSOR_SEED_CENTS + ENTRY_FEE_CENTS * len(self._entries) + self._rollover_cents'),
-    ("potluck/drawing.py",
-     '            entries=self._entries,\n',
-     '            entries=list(self._entries),\n'),
-    ("potluck/drawing.py",
-     '        self._entries.clear()\n',
-     '        self._entries = []\n'),
-    ("potluck/drawing.py",
-     '        if not participant:\n            raise ValueError("participant is required")\n',
-     '        if self._closed:\n            raise RuntimeError("draw is closed")\n'
-     '        if not participant:\n            raise ValueError("participant is required")\n'),
+    ("potluck/codes.py", "        return str(value)", "        return f\"{value:0{CODE_LENGTH}d}\""),
+    ("potluck/matching.py", "    common = Counter(entry_code) & Counter(winning_code)\n    return sum(common.values())",
+     "    return sum(1 for a, b in zip(entry_code, winning_code) if a == b)"),
+    ("potluck/services/payouts.py", "    for tier in sorted(TIER_SHARES):", "    for tier in sorted(TIER_SHARES, reverse=True):"),
+    ("potluck/services/draws.py", "        entries = self._store.entries_for_draw(draw.draw_id)\n",
+     "        entries = self._store.entries_for_draw(draw.draw_id, active_only=True)\n"),
+    ("potluck/services/entries.py",
+     "    def active_count(self, participant_id: str) -> int:\n        return sum(1 for e in self._store.entries_for_participant(participant_id) if e.status == ACTIVE)",
+     "    def active_count(self, participant_id: str, draw_id: int) -> int:\n"
+     "        return sum(1 for e in self._store.entries_for_participant(participant_id)\n"
+     "                   if e.status == ACTIVE and e.draw_id == draw_id)"),
+    ("potluck/services/entries.py", "        if self.active_count(participant_id) + quantity",
+     "        if self.active_count(participant_id, draw.draw_id) + quantity"),
 ]

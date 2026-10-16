@@ -8,7 +8,6 @@ from .netting import group_settle_date, netting_groups
 
 
 class InstructionJob:
-    """Nightly job: send netted settlement instructions for trades. Ops may re-run it after a failure."""
 
     def __init__(self, db: Database, calendar: BusinessCalendar = None):
         self._trades = TradeRepository(db)

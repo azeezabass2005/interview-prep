@@ -2,7 +2,6 @@ import time
 
 
 class SystemClock:
-    """Epoch seconds as a float."""
 
     def time(self) -> float:
         return time.time()

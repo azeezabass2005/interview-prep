@@ -1,13 +1,24 @@
-# Restaurant Tip Pool
+# Restaurant Tip Pools
 
-At the end of each night a restaurant pools all tips and shares them among eligible staff. The code in `tips/` implements the rules below.
-Staff have noticed their payouts don't match the house policy.
+A restaurant pools tips separately for **lunch** and **dinner** each day and shares each pool among the staff who worked that service.
+Staff see a weekly tip statement. The repository contains the tip service.
 
-## Rules
+## Services and hours
 
-1. **Pool:** card tips **minus 3%** (card processing cost) **plus** cash tips. Cash tips aren't charged the 3%.
-2. **Eligibility:** managers are **never** eligible (it's illegal). Anyone who worked **fewer than 2 hours** that night isn't eligible.
-3. **Weight:** each eligible employee's weight is **role points × hours** worked that night, summed over every role they worked.
+- **Lunch** runs 10:00–16:00 and **dinner** 16:00–24:00 on the same calendar day.
+- A shift counts toward each service **only for the hours it overlaps** that service window (a 14:00–22:00 shift is 2 lunch hours and 6 dinner hours).
+- Hours are counted to the minute.
+
+## Pools
+
+- For each day and service, the manager declares **card tips** and **cash tips**.
+- Pool = card tips **minus 3%** (card processing) **plus** cash tips, rounded half-up to the cent. Cash isn't charged the 3%.
+
+## Eligibility and weights
+
+- **Managers are never eligible** (and their hours don't count for anything).
+- Anyone with **fewer than 2 hours** in that service is not eligible for that pool. The minimum applies to the employee's total hours across roles in that service.
+- Weight = role points × hours in that service, **summed over all roles** worked in that service:
 
 | Role | Points |
 |---|---|
@@ -16,25 +27,17 @@ Staff have noticed their payouts don't match the house policy.
 | BUSSER | 5 |
 | HOST | 3 |
 | KITCHEN | 2 |
-| MANAGER | not eligible |
 
-   The 2-hour minimum applies to an employee's **total** hours across roles.
-4. **Shares:** each employee gets pool × weight / total weight, **rounded down** to the cent. Leftover cents go one each to the
-   employees with the **largest fractional remainders** (ties: alphabetical by name), so shares add up to the pool exactly.
+## Shares
+
+Each eligible employee gets pool × weight / total weight, rounded down to the cent. Leftover cents go one each to the employees with the
+**largest fractional remainders** (ties: alphabetical), so shares add up to the pool exactly.
+
+## Weekly statement
+
+Sum of an employee's shares from every pool in a Monday–Sunday week.
 
 ## Example
 
-Card tips $1,000.00, cash $200.00 → pool **$1,170.00**.
-Alice SERVER 6 h (60) · Bob BARTENDER 5 h (40) · Cara BUSSER 4 h (20) · Dan MANAGER 8 h (excluded) · Eve HOST 1.5 h (excluded).
-Total weight 120 → **Alice $585.00 · Bob $390.00 · Cara $195.00**.
-
-## Candidate questions
-
-1. Identify anything in the rules that must be clarified before implementation.
-2. Explain how you would model shifts, weights and payouts.
-3. Outline the distribution and the tests you would want.
-4. Identify bugs or issues and fix them.
-
-```
-python -m unittest discover -s tests -v
-```
+Dinner: card $1,000.00, cash $200.00 → pool **$1,170.00**. Alice SERVER 6 h (60), Bob BARTENDER 5 h (40), Cara BUSSER 4 h (20),
+Dan MANAGER 8 h (excluded), Eve HOST 1.5 h (excluded) → **Alice $585.00 · Bob $390.00 · Cara $195.00**.

@@ -13,18 +13,16 @@ class QuoteProvider(Protocol):
 
 
 class VendorFeedProvider:
-    """Real vendor client (HTTP). Not available in this exercise."""
 
     def __init__(self, base_url: str, api_key: str):
         self._base_url = base_url
         self._api_key = api_key
 
-    def fetch(self, symbol: str, timeout: float) -> Quote:  # pragma: no cover
+    def fetch(self, symbol: str, timeout: float) -> Quote:
         raise ProviderError("vendor feed not reachable from the interview sandbox")
 
 
 class ScriptedProvider:
-    """Test double: returns prices from a dict and counts calls."""
 
     def __init__(self, clock, prices=None, fail=False):
         self._clock = clock

@@ -25,7 +25,7 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 ROUNDS = {"1": "round-1", "2": "round-2"}
 NOTES = os.path.join(ROOT, "interviewer-notes")
 SESSIONS = os.path.join(ROOT, "sessions")
-TIMEBOX = {"1": 45, "2": 50}
+TIMEBOX = {"1": 50, "2": 50}
 
 
 def exercises(rnd):

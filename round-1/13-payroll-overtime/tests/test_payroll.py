@@ -1,29 +1,16 @@
 import unittest
-from decimal import Decimal as D
 
-from payroll.models import Shift
-from payroll.pay import weekly_pay
-from tests.helpers import MONDAY, shift
-
-RATE = D("20")
+from payroll.app import build_app
 
 
-class TestPay(unittest.TestCase):
+class TestPayroll(unittest.TestCase):
     def test_single_regular_day(self):
-        self.assertEqual(weekly_pay(RATE, [shift(0, 9, 8)]), D("160.00"))
-
-    def test_daily_overtime(self):
-        self.assertEqual(weekly_pay(RATE, [shift(0, 8, 10)]), D("220.00"))
-
-    def test_weekly_overtime_six_days(self):
-        self.assertEqual(weekly_pay(RATE, [shift(d, 9, 8) for d in range(6)]), D("1040.00"))
-
-    def test_empty_week(self):
-        self.assertEqual(weekly_pay(RATE, []), D("0.00"))
-
-    def test_shift_must_end_after_start(self):
-        with self.assertRaises(ValueError):
-            Shift(MONDAY, MONDAY)
+        api = build_app()
+        api.hire("w1", "Wes", "20", "2026-01-01")
+        api.clock("w1", {"start": "2026-03-02T09:00", "end": "2026-03-02T17:00", "break_taken": True})
+        status, stub = api.stub("w1", "2026-03-02")
+        self.assertEqual(status, 200)
+        self.assertEqual(stub["gross"], "160.00")
 
 
 if __name__ == "__main__":

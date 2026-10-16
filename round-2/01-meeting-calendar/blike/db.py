@@ -16,7 +16,6 @@ CREATE TABLE IF NOT EXISTS meeting_requests (
     score             INTEGER NOT NULL DEFAULT 0,
     status            TEXT NOT NULL DEFAULT 'PENDING'
 );
--- lookups for client retries
 CREATE INDEX IF NOT EXISTS idx_requests_requester_key ON meeting_requests (requester, idempotency_key);
 CREATE INDEX IF NOT EXISTS idx_requests_status ON meeting_requests (status);
 
@@ -48,7 +47,6 @@ CREATE TABLE IF NOT EXISTS outbox (
 
 
 class Database:
-    """Thin wrapper around a SQLite file. Each transaction uses its own connection."""
 
     def __init__(self, path: str):
         self.path = path

@@ -12,7 +12,6 @@ PRICE_PLACES = Decimal("0.0001")
 
 
 class ExecutionService:
-    """Applies execution reports from the exchange gateway."""
 
     def __init__(self, db: Database, clock):
         self._orders = OrderRepository(db)
@@ -31,7 +30,7 @@ class ExecutionService:
             raise NotFound(execution.order_id)
 
         if not self._executions.insert_if_new(execution):
-            return order  # redelivered report
+            return order
 
         filled = order.filled_qty + execution.quantity
         if order.avg_price is None:

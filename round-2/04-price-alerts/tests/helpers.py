@@ -13,7 +13,6 @@ from alerts.services.alert_service import AlertService
 from alerts.services.delivery import DeliveryWorker
 from alerts.services.evaluator import Evaluator
 
-# 15:00 UTC = 11:00 in New York (EDT) on this date
 NOON_ISH = datetime(2026, 5, 12, 15, 0, tzinfo=timezone.utc)
 
 

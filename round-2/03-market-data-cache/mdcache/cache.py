@@ -3,7 +3,6 @@ from typing import Any, Dict, Optional, Tuple
 
 
 class TtlCache:
-    """In-process cache with a per-entry time to live."""
 
     def __init__(self, clock, ttl_ms: int):
         self._clock = clock

@@ -1,5 +1,5 @@
 class DomainError(Exception):
-    """Base class for errors the API turns into 4xx responses."""
+    pass
 
 
 class ValidationError(DomainError):

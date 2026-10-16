@@ -36,7 +36,7 @@ class TestQueue(unittest.TestCase):
         self.w.worker().poll_once()
         body = self.w.api.get_job(job_id).body
         self.assertEqual((body["status"], body["attempts"]), ("PENDING", 1))
-        self.assertIsNone(self.w.worker().poll_once())  # backing off
+        self.assertIsNone(self.w.worker().poll_once())
 
     def test_crashed_worker_job_is_reclaimed(self):
         job_id = self.w.api.post_job({"kind": "echo", "payload": {"msg": "x"}}).body["job_id"]

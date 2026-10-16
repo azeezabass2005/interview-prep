@@ -1,33 +1,39 @@
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal
-from typing import List
+from typing import Dict, List, Optional
 
-PURCHASE = "PURCHASE"
-CASH = "CASH"
-PAYMENT = "PAYMENT"
+PURCHASE, REFUND, CASH, PAYMENT, FEE = "PURCHASE", "REFUND", "CASH", "PAYMENT", "FEE"
 
 
 @dataclass(frozen=True)
 class Txn:
-    day: int  # 0-based day within the cycle
+    posted_on: date
     kind: str
     amount: Decimal
 
 
-@dataclass
-class Cycle:
-    days: int
-    paid_in_full_last_cycle: bool
-    start_purchase: Decimal = Decimal("0")
-    start_cash: Decimal = Decimal("0")
-    txns: List[Txn] = field(default_factory=list)
-
-
 @dataclass(frozen=True)
 class Statement:
-    purchase_balance: Decimal
-    cash_balance: Decimal
-    purchase_interest: Decimal
-    cash_interest: Decimal
+    cycle_start: date
+    cycle_end: date
+    days: int
+    interest: Dict[str, Decimal]
+    fees: Decimal
+    balances: Dict[str, Decimal]
     new_balance: Decimal
     minimum_due: Decimal
+    due_date: date
+
+
+@dataclass
+class Account:
+    account_id: str
+    credit_limit: Decimal
+    opened_on: date
+    txns: List[Txn] = field(default_factory=list)
+    statements: List[Statement] = field(default_factory=list)
+
+    @property
+    def last_statement(self) -> Optional[Statement]:
+        return self.statements[-1] if self.statements else None

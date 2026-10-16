@@ -2,7 +2,6 @@ from ..config import INTERNAL_DOMAIN, SENDER_WEIGHTS, URGENCY_WEIGHTS, VIP_SENDE
 
 
 class ScoringService:
-    """Priority score for a meeting request. Higher is more important."""
 
     def sender_class(self, sender: str) -> str:
         if sender in VIP_SENDERS:

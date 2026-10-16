@@ -1,37 +1,38 @@
-# Hotel Rate Engine
+# Hotel Reservations
 
-A hotel's booking site quotes a total price for a stay and handles cancellations. The code in `hotel/` implements the rules below.
-The front desk keeps overriding quotes by hand.
+A boutique hotel sells rooms through its own website. The service checks availability per night, prices stays under two rate plans,
+books reservations and handles cancellations. The repository contains it.
 
-## Pricing
+## Inventory
 
-1. **Nightly base rate:** STANDARD $150, DELUXE $220, SUITE $400.
-2. **Weekend nights** (the nights of **Friday and Saturday**) cost **20% more**.
-3. **Length-of-stay discount** on the room subtotal: **3–6 nights: 5%**, **7 or more nights: 15%**.
-4. **Promo code** `SAVE50`: **$50 off**, applied **after** the length-of-stay discount.
-5. **Occupancy tax:** **14.75%** of the discounted room total.
-6. **City fee:** **$3.50 per night**, **not taxed**.
-7. Every money amount is rounded half-up to the cent when it's computed.
+Room types and counts: STANDARD (10 rooms, $150/night), DELUXE (5, $220), SUITE (2, $400). A stay of N nights needs one room of the
+type available on **every** night of the stay. A reservation holds one room per night from check-in up to (not including) check-out.
+
+## Pricing (per reservation)
+
+1. **Nightly rate:** base rate; nights of **Friday and Saturday** cost **20% more**.
+2. **Length-of-stay discount** on the room subtotal: 3–6 nights **5%**, 7+ nights **15%**.
+3. **Rate plan:** FLEXIBLE (no change) or NON_REFUNDABLE (**10% off**, applied after the length-of-stay discount).
+4. **Promo code** `SAVE50`: **$50 off**, applied **last** (after the rate-plan discount).
+5. **Occupancy tax 14.75%** on the discounted room total. **City fee $3.50 per night**, not taxed.
+Each amount is rounded half-up to the cent when computed.
 
 ## Cancellation
 
-Check-in time is **15:00** on the arrival date.
-- Cancelled **168 hours (7 days) or more** before check-in: **full refund**.
-- **48 – 168 hours** before: refund everything **except the first night** (its nightly rate including any weekend surcharge, plus tax on it).
-- **Less than 48 hours** before: **no refund**.
+Check-in time is **15:00** hotel time on the arrival date.
+- NON_REFUNDABLE: no refund.
+- FLEXIBLE: **168 hours or more** before check-in → full refund; **48–168 hours** → refund everything except the first night
+  (its nightly rate plus tax on it); **less than 48 hours** → no refund.
+Cancelled reservations release their rooms.
+
+## Data model
+
+| Entity | Fields |
+|---|---|
+| Room type | code, rooms, base rate |
+| Reservation | id, guest, room type, check-in, check-out, plan, promo, nightly rates, totals, status |
 
 ## Example
 
-DELUXE, arriving Thu 2026-06-04, 3 nights (Thu, Fri, Sat): 220 + 264 + 264 = 748.00 → 5% = −37.40 → 710.60 →
-tax 104.81 → city fee 10.50 → **$825.91**.
-
-## Candidate questions
-
-1. Identify anything in the rules that must be clarified before implementation.
-2. Explain how you would model stays, quotes and cancellations.
-3. Outline the price calculation and the tests you would want.
-4. Identify bugs or issues and fix them.
-
-```
-python -m unittest discover -s tests -v
-```
+DELUXE, FLEXIBLE, arriving Thu 2026-06-04 for 3 nights (Thu, Fri, Sat): 220 + 264 + 264 = 748.00 → 5% → 710.60 → tax 104.81 →
+city fee 10.50 → **$825.91**.

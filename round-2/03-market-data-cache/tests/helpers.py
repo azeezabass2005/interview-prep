@@ -13,7 +13,6 @@ from mdcache.services.quotes import QuoteService
 
 
 class World:
-    """One service instance with a fake vendor, fake clock and temp DB."""
 
     def __init__(self, prices=None):
         self._dir = tempfile.TemporaryDirectory()

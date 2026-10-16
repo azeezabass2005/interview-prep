@@ -5,7 +5,6 @@ from .services.evaluator import Evaluator
 
 
 class Instance:
-    """Everything one API process needs."""
 
     def __init__(self, db, clock):
         self.repo = FlagRepository(db)

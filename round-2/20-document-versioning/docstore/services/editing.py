@@ -26,7 +26,6 @@ class EditingService:
         return doc_id
 
     def save(self, doc_id: int, author: str, content: str, base_version: int) -> int:
-        """Store a new version; returns the version number."""
         self._document(doc_id)
         digest = checksum(content)
         reference = self._versions.first(doc_id)

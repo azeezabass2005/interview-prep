@@ -1,24 +1,25 @@
 FIXES = [
-    ("fees/commission.py",
-     '''    for upper, rate in TIERS:
-        if upper is None or notional <= upper:
-            return notional * rate
-    raise AssertionError("unreachable: last tier is unbounded")''',
-     '''    total = Decimal("0")
-    lower = Decimal("0")
-    for upper, rate in TIERS:
-        top = notional if upper is None else min(notional, upper)
+    ("fees/services/commission.py",
+     """    for upper, rate in EQUITY_TIERS:
+        if upper is None or amount <= upper:
+            return amount * rate
+    raise AssertionError("tier table must end with an unbounded band")""",
+     """    total, lower = Decimal("0"), Decimal("0")
+    for upper, rate in EQUITY_TIERS:
+        top = amount if upper is None else min(amount, upper)
         if top > lower:
             total += (top - lower) * rate
-        if upper is None or notional <= upper:
+        if upper is None or amount <= upper:
             return total
         lower = upper
-    raise AssertionError("unreachable: last tier is unbounded")'''),
-    ("fees/commission.py", "return max(fee, MIN_COMMISSION)", "return min(max(fee, MIN_COMMISSION), MAX_COMMISSION)"),
-    ("fees/commission.py", "from .schedule import CENT, MIN_COMMISSION,", "from .schedule import CENT, MAX_COMMISSION, MIN_COMMISSION,"),
-    ("fees/commission.py", "from decimal import ROUND_HALF_UP, Decimal", "from decimal import ROUND_HALF_UP, ROUND_UP, Decimal"),
-    ("fees/commission.py", "(notional * REG_FEE_RATE).quantize(CENT, rounding=ROUND_HALF_UP)", "(notional * REG_FEE_RATE).quantize(CENT, rounding=ROUND_UP)"),
-    ("fees/statement.py", "if i > VOLUME_DISCOUNT_FROM_TRADE - 1:", "if i >= VOLUME_DISCOUNT_FROM_TRADE - 1:"),
-    ("fees/statement.py", "account_trades = [t for t in trades if t.account == account]",
-     "account_trades = sorted((t for t in trades if t.account == account), key=lambda t: t.executed_at)"),
+    raise AssertionError("tier table must end with an unbounded band")"""),
+    ("fees/services/commission.py", "    return clamp(half_up(OPTION_PER_CONTRACT * contracts), OPTION_MIN, EQUITY_MAX)",
+     "    return clamp(half_up(OPTION_PER_CONTRACT * contracts), OPTION_MIN)"),
+    ("fees/services/regulatory.py", "from ..money import ZERO, half_up", "from ..money import ZERO, always_up"),
+    ("fees/services/regulatory.py", "    return half_up(notional(trade) * REG_FEE_RATE)", "    return always_up(notional(trade) * REG_FEE_RATE)"),
+    ("fees/services/statements.py", "if start <= t.executed_at.date() <= end]", "if start <= t.executed_at.date() < end]"),
+    ("fees/services/statements.py",
+     "        for number, trade in enumerate(self.trades_in_month(account_id, year, month), start=1):\n            if trade.status != ACTIVE:\n                continue\n",
+     "        active = [t for t in self.trades_in_month(account_id, year, month) if t.status == ACTIVE]\n"
+     "        for number, trade in enumerate(active, start=1):\n"),
 ]

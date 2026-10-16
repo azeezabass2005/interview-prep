@@ -1,29 +1,28 @@
 import unittest
-from datetime import date
-from decimal import Decimal as D
 
-from bond.daycount import days_30_360
-from bond.models import Bond
-from bond.pricing import accrued_interest, settlement_date
-from bond.schedule import previous_and_next
-
-BOND = Bond(D("1000000"), D("0.05"), 2, date(2030, 5, 15))
+from bonds.app import build_app
 
 
-class HiddenBond(unittest.TestCase):
-    def test_B1_d2_adjusts_only_when_d1_is_30(self):
-        self.assertEqual(days_30_360(date(2026, 1, 15), date(2026, 3, 31)), 76)
-        self.assertEqual(days_30_360(date(2026, 1, 30), date(2026, 3, 31)), 60)
+def book(maturity="2030-05-15", day_count="30/360", trade_date="2026-03-12", frequency=2, holidays=()):
+    api, _ = build_app()
+    for h in holidays:
+        api.add_holiday(h)
+    api.load_bond({"bond_id": "B", "coupon": "0.05", "frequency": frequency, "maturity": maturity, "day_count": day_count})
+    return api.book({"trade_id": "T", "bond_id": "B", "face": "1000000", "price": "99.5", "trade_date": trade_date})[1]
+
+
+class HiddenBonds(unittest.TestCase):
+    def test_B1_d2_rule_needs_d1_30(self):
+        self.assertEqual(book(maturity="2030-07-15", trade_date="2026-03-30")["accrued"], "10555.56")
 
     def test_B2_end_of_month_rule(self):
-        eom = Bond(D("1000000"), D("0.05"), 2, date(2030, 6, 30))
-        self.assertEqual(previous_and_next(eom, date(2026, 1, 15))[0], date(2025, 12, 31))
+        self.assertEqual(book(maturity="2030-06-30", day_count="ACT/360", trade_date="2026-01-14")["accrued"], "2083.33")
 
-    def test_B3_settlement_skips_weekend(self):
-        self.assertEqual(settlement_date(date(2026, 3, 13)), date(2026, 3, 16))
+    def test_B3_holidays_are_not_business_days(self):
+        self.assertEqual(book(trade_date="2026-04-02", holidays=["2026-04-03"])["settle_date"], "2026-04-06")
 
-    def test_B4_settle_on_coupon_date_accrues_nothing(self):
-        self.assertEqual(accrued_interest(BOND, date(2026, 5, 15)), D("0.00"))
+    def test_B4_settle_on_coupon_date(self):
+        self.assertEqual(book(trade_date="2026-05-14")["accrued"], "0.00")
 
-    def test_B5_spec_example_rounds_half_up(self):
-        self.assertEqual(accrued_interest(BOND, date(2026, 3, 13)), D("16388.89"))
+    def test_B5_act_360(self):
+        self.assertEqual(book(day_count="ACT/360", trade_date="2026-01-14")["accrued"], "8472.22")

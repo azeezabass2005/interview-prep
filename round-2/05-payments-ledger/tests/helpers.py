@@ -21,7 +21,6 @@ class World:
         self.entries = EntryRepository(self.db)
 
     def instance(self):
-        """Another API instance sharing the same database."""
         return WalletService(self.db, self.clock)
 
     def cleanup(self):

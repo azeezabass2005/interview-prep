@@ -19,7 +19,7 @@ class Fill:
 class Lot:
     opened: date
     quantity: Decimal
-    cost: Decimal  # per share
+    cost: Decimal
 
 
 @dataclass(frozen=True)

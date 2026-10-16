@@ -1,13 +1,21 @@
-# Tournament Prize Pool
+# Card Room Tournament Manager
 
-A card-room runs weekly tournaments. The code in `prizes/` computes each finisher's prize from the entries and the final standings.
+A card room runs weekly freeze-out tournaments with re-entry. The tournament director's software registers players, records
+eliminations hand by hand, and pays prizes and bounties at the end. The repository contains that software.
 
-## Rules
+## Registration and re-entry
 
-- **Entry fee:** **$55** per entry. Players may **re-enter** after busting; every entry pays the fee and counts as an entry.
-- **Rake:** the house keeps **10% of the entry fees** (rounded down to the cent).
-- **Guarantee:** the prize pool is at least **$2,000**. If entry fees minus rake fall short, the house adds the difference.
-- **Places paid** depend on the number of entries:
+- Buy-in is **$55** per entry: **$45** goes to the prize pool side, **$10** is the entry's **bounty**.
+- Players register before the start or during **late registration**, which stays open **through the end of level 6** (blind levels
+  are numbered from 1; the director advances levels manually).
+- A busted player may **re-enter** (buy a new entry) during late registration. A player can have **at most 2 re-entries** (3 entries
+  in total) and only one live entry at a time.
+
+## Prize pool
+
+- **Rake:** the house keeps **10% of the prize-pool side** of all entries (rounded down to the cent).
+- **Guarantee:** the prize pool is at least **$2,000**. If the prize-pool side minus rake is less, the house adds the difference.
+- Places paid depend on the number of **entries** (re-entries count):
 
 | Entries | Paid places (% of prize pool) |
 |---|---|
@@ -15,26 +23,23 @@ A card-room runs weekly tournaments. The code in `prizes/` computes each finishe
 | 11 – 30 | 50 / 30 / 20 |
 | 31 or more | 40 / 25 / 15 / 12 / 8 |
 
-- **Ties:** players who tie share the places they occupy. Two players tied for 2nd split (2nd + 3rd) equally, and
-  the next finisher is **4th**. A tie that straddles the last paid place shares only the paid places it covers.
-- **Cents:** each place amount is rounded down to the cent. Leftover cents go to the **1st place** finisher.
-  When a tie split leaves cents, they go one each to the tied players in alphabetical order.
-- The prizes paid must add up to exactly the prize pool.
+- Each place amount is rounded down to the cent; leftover cents go to **1st place**.
 
-## Example
+## Eliminations and finishing places
 
-61 entries → fees $3,355.00, rake $335.50, prize pool **$3,019.50**. Five places: $1,207.80 (+1¢ leftover) / $754.87 / $452.92 / $362.34 / $241.56.
+- Eliminations are recorded per hand: the hand number, the eliminated player(s), and the player who won the pot.
+- A player's finishing place is decided by their **final** elimination (one with no re-entry after it).
+- Players eliminated **in the same hand** tie: they share the places they occupy equally, and the next place skips accordingly.
+  Leftover cents from a tie split go one each to tied players in alphabetical order.
+- The last player standing is 1st.
 
-20 entries → fees $1,100, rake $110 → net $990, so the **guarantee** applies: pool **$2,000**. Finish: ana 1st; ben and cy tied 2nd; dee 4th.
-ana $1,000; ben $500; cy $500; dee $0.
+## Bounties
 
-## Candidate questions
+Every time an entry is eliminated, its **$10 bounty** goes to the player who won that pot (split equally, rounded down, if several
+players shared the pot; leftover cents to the first in alphabetical order).
 
-1. Identify anything in the rules that must be clarified before implementation.
-2. Explain how you would model entries, standings and payouts.
-3. Outline the payout calculation and the tests you would want.
-4. Identify bugs or issues and fix them.
+## Examples
 
-```
-python -m unittest discover -s tests -v
-```
+- 61 entries → prize side 61 × $45 = $2,745.00; rake $274.50; net $2,470.50 → pool **$2,470.50** (above the guarantee).
+- 20 entries → net $810.00 → the guarantee applies: pool **$2,000.00**, paid 50 / 30 / 20.
+- 20 entries: ana wins; ben and cy bust in the same hand as 2nd/3rd → each gets (600 + 400) / 2 = **$500**; dee (4th) gets nothing.

@@ -1,50 +1,47 @@
 import unittest
 
-from engine.matching import MatchingEngine
-from engine.models import BUY, SELL, Order
+from exchange.app import build_app
 
 
-class HiddenEngine(unittest.TestCase):
+def order(api, oid, side, price, qty, member="m", type_="LIMIT"):
+    return api.submit(member, {"order_id": oid, "symbol": "ABC", "side": side, "price": price, "quantity": qty, "type": type_})
+
+
+class HiddenExchange(unittest.TestCase):
     def setUp(self):
-        self.engine = MatchingEngine()
+        self.api, self.engine = build_app()
 
-    def test_B1_fills_at_resting_price(self):
-        self.engine.submit(Order("S1", "a", SELL, 101, 100))
-        self.engine.submit(Order("S2", "b", SELL, 100, 50))
-        self.engine.submit(Order("S3", "c", SELL, 100, 70))
-        fills = self.engine.submit(Order("B1", "d", BUY, 101, 130))
-        self.assertEqual(sorted(f.price for f in fills), [100, 100, 101])
+    def test_B1_partial_fill_keeps_priority(self):
+        order(self.api, "S1", "SELL", 100, 100)
+        order(self.api, "S2", "SELL", 100, 100)
+        first = order(self.api, "B1", "BUY", 100, 30)[1]["trades"]
+        second = order(self.api, "B2", "BUY", 100, 30)[1]["trades"]
+        self.assertEqual([t["sell"] for t in first + second], ["S1", "S1"])
 
-    def test_B2_time_priority_within_level(self):
-        self.engine.submit(Order("S1", "a", SELL, 100, 10))
-        self.engine.submit(Order("S2", "b", SELL, 100, 10))
-        fills = self.engine.submit(Order("B1", "d", BUY, 100, 10))
-        self.assertEqual([f.resting_id for f in fills], ["S1"])
+    def test_B2_trades_at_resting_price(self):
+        order(self.api, "S1", "SELL", 101, 100)
+        order(self.api, "S2", "SELL", 100, 50)
+        order(self.api, "S3", "SELL", 100, 70)
+        trades = order(self.api, "B1", "BUY", 101, 130)[1]["trades"]
+        self.assertEqual([(t["sell"], t["price"], t["quantity"]) for t in trades],
+                         [("S2", 100, 50), ("S3", 100, 70), ("S1", 101, 10)])
 
-    def test_B3_incoming_remainder_rests(self):
-        self.engine.submit(Order("S1", "a", SELL, 100, 100))
-        self.engine.submit(Order("B1", "d", BUY, 100, 150))
-        self.assertEqual(self.engine.book.bids.depth(), {100: 50})
+    def test_B3_ioc_never_rests(self):
+        order(self.api, "S1", "SELL", 100, 100)
+        body = order(self.api, "B1", "BUY", 100, 150, type_="IOC")[1]
+        self.assertEqual(body["filled"], 100)
+        self.assertEqual(self.api.depth("ABC")[1]["bids"], [])
 
-    def test_B4_partial_fill_keeps_queue_position(self):
-        self.engine.submit(Order("S1", "a", SELL, 100, 100))
-        self.engine.submit(Order("S2", "b", SELL, 100, 100))
-        first = self.engine.submit(Order("B1", "d", BUY, 100, 30))
-        second = self.engine.submit(Order("B2", "d", BUY, 100, 30))
-        self.assertEqual([f.resting_id for f in first + second], ["S1", "S1"])
+    def test_B4_amend_down_keeps_priority(self):
+        order(self.api, "S1", "SELL", 100, 100)
+        order(self.api, "S2", "SELL", 100, 100)
+        self.api.amend("S1", {"quantity": 60})
+        trades = order(self.api, "B1", "BUY", 100, 10)[1]["trades"]
+        self.assertEqual(trades[0]["sell"], "S1")
 
-    def test_B5_cancel_removes_empty_level(self):
-        self.engine.submit(Order("S1", "a", SELL, 101, 10))
-        self.engine.submit(Order("S2", "b", SELL, 102, 10))
-        self.engine.cancel("S1")
-        self.assertEqual(self.engine.book.asks.best_price(), 102)
-        fills = self.engine.submit(Order("B1", "d", BUY, 102, 5))
-        self.assertEqual([f.resting_id for f in fills], ["S2"])
-
-    def test_G1_no_self_trade(self):
-        self.engine.submit(Order("S1", "alice", SELL, 99, 10))
-        self.engine.submit(Order("S2", "bob", SELL, 100, 10))
-        fills = self.engine.submit(Order("B1", "alice", BUY, 100, 10))
-        self.assertEqual([f.resting_id for f in fills], ["S2"])
-        self.assertIn("S1", self.engine.book.resting)
-        self.assertEqual(self.engine.book.asks.depth(), {99: 10})
+    def test_B5_cancel_clears_empty_level(self):
+        order(self.api, "S1", "SELL", 101, 10)
+        order(self.api, "S2", "SELL", 102, 10)
+        self.api.cancel("S1")
+        trades = order(self.api, "B1", "BUY", 102, 5)[1]["trades"]
+        self.assertEqual(trades[0]["sell"], "S2")

@@ -8,7 +8,6 @@ from ..repositories.jobs import JobRepository
 
 
 def parse_run_at(value: Optional[str], now: datetime) -> datetime:
-    """Client timestamps carry an offset; we store naive UTC."""
     if value is None:
         return now
     try:

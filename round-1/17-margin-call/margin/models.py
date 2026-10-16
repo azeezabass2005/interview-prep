@@ -1,32 +1,44 @@
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal
-from typing import List
+from typing import Dict, List, Optional
 
-HAIRCUTS = {"EQUITY": Decimal("0.25"), "ETF": Decimal("0.15"), "BOND": Decimal("0.10")}
-CONCENTRATION_LIMIT = Decimal("0.40")
-CONCENTRATED_HAIRCUT = Decimal("0.50")
-SHORT_REQUIREMENT = Decimal("0.30")
-CALL_ROUNDING = Decimal("100")
+OPEN, MET = "OPEN", "MET"
 
 
 @dataclass(frozen=True)
-class Position:
+class Price:
     symbol: str
-    asset_class: str
-    quantity: int
+    on: date
     price: Decimal
-
-    @property
-    def market_value(self) -> Decimal:
-        return self.quantity * self.price
-
-    @property
-    def is_long(self) -> bool:
-        return self.quantity > 0
 
 
 @dataclass
 class Account:
     account_id: str
     cash: Decimal
-    positions: List[Position] = field(default_factory=list)
+    positions: Dict[str, int] = field(default_factory=dict)
+
+
+@dataclass
+class Call:
+    account_id: str
+    issued_on: date
+    amount: Decimal
+    status: str = OPEN
+
+
+@dataclass(frozen=True)
+class Deposit:
+    account_id: str
+    on: date
+    amount: Decimal
+
+
+@dataclass(frozen=True)
+class Line:
+    symbol: str
+    quantity: int
+    price: Decimal
+    market_value: Decimal
+    haircut: Optional[Decimal]

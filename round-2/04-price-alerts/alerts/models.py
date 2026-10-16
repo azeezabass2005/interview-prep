@@ -10,8 +10,8 @@ SENT = "SENT"
 class User:
     user_id: str
     timezone: str
-    quiet_start: str  # "HH:MM" local
-    quiet_end: str  # "HH:MM" local
+    quiet_start: str
+    quiet_end: str
     channel: str = "push"
 
 

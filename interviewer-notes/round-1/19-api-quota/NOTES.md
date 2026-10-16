@@ -1,33 +1,72 @@
-# 19 · Market Data API Quotas: interviewer notes
+# R1-19 · Market Data API Metering: Interviewer Guide
 
-Code: `quota/`. Shape: continuous refill with a cap, precision (fractions), time-based state, an "impossible request" edge case, state migration on plan change.
-Also a natural bridge into Round 2 thinking: "what if there are 3 API servers?" (in-memory buckets don't share state).
+~200 lines in `metering/`. One passing test (the bucket starts full). Rate limiting is time-based (fake clock needed); metering and
+invoicing are accounting rules.
+
+## Session plan (60 min)
+0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
-
-| Topic | Answer |
+| Question | Answer |
 |---|---|
-| Fractions | Tokens are fractional; only the decision is integer-cost. |
-| Cost > capacity | Reject, `retry_after = None`, never consume. |
-| Upgrade | Tokens carry over (no free top-up). |
+| Fractional tokens | Yes, continuous refill; only the decision is whole-cost. |
 | Clock going backwards | Treat as 0 elapsed (already handled by `max`). |
-| Unknown client | Out of scope (KeyError is fine). |
-| Multiple servers | Out of scope here, but great to mention as a risk. |
+| Which requests are metered? | Allowed ones only. |
+| Month boundary | UTC calendar month of the request time. |
+| FREE hard cap message | `allowed=false`, `retry_after=None`. |
+| Overage rounding | Half-up to the cent on the total overage. |
 
-## Planted issues
+## Code map
+| Module | Responsibility |
+|---|---|
+| `services/bucket.py` | Refill and wait-time maths |
+| `services/limiter.py` | Registration, plan changes, the allow/reject decision |
+| `services/meter.py` | Monthly usage (correct month keys) |
+| `services/invoices.py` | Monthly invoice |
+| `plans.py`, `store.py`, `api.py`, `app.py` | Plans, storage, facade, wiring |
 
-| ID | Location | What is wrong | Fix | Failing test |
-|---|---|---|---|---|
-| B1 | `bucket.py::_refill` | No cap at capacity, so an idle client builds an unlimited burst | `min(capacity, ...)` | FREE idle 100 s: 11 quotes → 10 allowed |
-| B2 | `bucket.py::change_plan` | Downgrade keeps tokens above the new capacity | cap at `plan.capacity` | PRO full → FREE: 11 quotes → 10 allowed |
-| B3 | `bucket.py::_refill` | `int(elapsed)` drops fractions **and** advances `last`, so frequent callers starve | keep the Decimal elapsed | drain; t=1.5 quote OK; t=2.0 quote OK |
-| B4 | `bucket.py::try_consume` | `retry_after` divides by capacity, not refill rate | `/ refill_per_second` | PRO drained, `/bulk` at t=0 → retry 1.0 (buggy 0.2) |
-| G1 | `bucket.py::try_consume` | Cost > capacity gives a finite retry | `None` when `cost > capacity` | FREE `/bulk` → `retry_after is None` |
+## Planted bugs (5)
 
-**B3 subtlety:** truncation alone would only delay refills, but combined with `self.last = now` it *loses* time on every call. A client polling every 0.5 s never refills. The candidate should articulate that.
+### B1 · Refill isn't capped
+- **Where:** `bucket.py::refill`: no `min(capacity, …)`.
+- **Test:** drain 10, wait 100 s, 11 quotes → only 10 allowed.
 
-The spec example (retry 0.5 at t=0.5) is untested and catches B3 (and B4 on PRO plans).
+### B2 · `retry_after` divides by capacity
+- **Where:** `bucket.py::wait_time`: `/ capacity`.
+- **Test:** PRO drained by 5 `/bulk` → next `/bulk` rejected with **1.0** (buggy 0.2).
 
-## Follow-ups
-- Why Decimal here? (Because `0.9 * 10` in float isn't 9, so ceiling to 0.1 breaks.)
-- How would you make this work across several API servers? (A shared store with an atomic check-and-decrement, e.g. a Redis Lua script or a DB row with a conditional update. Same idea as the Round 2 invariant.)
+### B3 · Refill truncates elapsed time and still advances the clock
+- **Where:** `bucket.py::refill`: `Decimal(int(...))` then `last_refill = now`. Frequent callers lose fractions forever.
+- **Test:** drain at t = 0; t = 1.5 → allowed; t = 2.0 → allowed (buggy: rejected).
+- **Discussion:** truncation alone would just delay; combined with resetting `last_refill` it *loses* time.
+
+### B4 · Rejected requests are metered
+- **Where:** `limiter.py::check`: `meter.record` runs before the token check.
+- **Test:** FREE: 11 quotes (1 rejected) → invoice units **10**.
+- **Fix:** record only on the allowed path.
+
+### B5 · Overage charged on all usage
+- **Where:** `invoices.py::invoice`: `overage_units = used if used > allowance`.
+- **Test:** PRO with 1,000,500 units → overage 500 units → **$500.50** total.
+- **Fix:** `max(used - allowance, 0)`.
+
+Hints: (1) the spec sentence; (2) "drive the clock / usage to the boundary".
+
+## Red herrings
+- Plan change caps tokens: correct.
+- Month key in UTC: correct.
+
+## Questions about the candidate's fixes (data structures)
+- **Bucket:** "Why is a token bucket O(1) per request and memory O(1) per client, versus a sliding-window log?" (The log stores every timestamp: O(requests in window).) "When would you prefer a sliding window counter?"
+- **B3:** "Why use Decimal here rather than float?" (Ceil to 0.1 s breaks with float: 0.9 × 10 ≠ 9.)
+- **Usage:** "Usage is a dict month → units per client. Memory over years? Retention?" (Archive closed months to billing storage; keep the current month hot.)
+- **Distributed:** "Three API servers: where does the bucket live?" (A shared store with an atomic check-and-decrement, e.g. a Lua script in Redis or a DB conditional update; the in-process dict breaks the limit by 3×.)
+
+## Feature requests
+1. **"Burst credits: PRO clients can exceed their bucket by up to 500 tokens once per hour."** Strong answer: a second bucket (credit pool) with its own refill; order of consumption; tests for the hourly reset.
+2. **"Per-endpoint limits in addition to the global bucket (e.g. /bulk max 1 per second)."** Strong answer: multiple buckets checked atomically (all-or-nothing consume); key by (client, endpoint).
+3. **"Prepaid plans: buy 5M units that never expire; consume prepaid before overage."** Strong answer: a prepaid balance ledger; invoice ordering: allowance → prepaid → overage.
+
+## Scoring signals
+- **Strong:** a fake clock helper; checks both the decision and the invoice for the same scenario (finds B4); reasons about fractions.
+- **Weak:** only checks allow/deny counts at t = 0.

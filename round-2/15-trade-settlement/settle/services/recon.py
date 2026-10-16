@@ -4,7 +4,6 @@ from ..models import Confirm, Trade
 
 
 def reconcile(trades: List[Trade], confirms: List[Confirm]) -> List[dict]:
-    """Return a list of breaks. A trade without a confirm, or a confirm without a trade, is a break too."""
     by_trade: Dict[str, Trade] = {t.trade_id: t for t in trades}
     breaks, seen = [], set()
     for c in confirms:

@@ -55,8 +55,8 @@ class TestEvaluationAndDelivery(unittest.TestCase):
 class TestQuietHours(unittest.TestCase):
     def test_daytime_window(self):
         user = User("u", "America/New_York", "13:00", "14:00")
-        self.assertTrue(in_quiet_hours(user, datetime(2026, 5, 12, 17, 30, tzinfo=timezone.utc)))  # 13:30 EDT
-        self.assertFalse(in_quiet_hours(user, datetime(2026, 5, 12, 19, 0, tzinfo=timezone.utc)))  # 15:00 EDT
+        self.assertTrue(in_quiet_hours(user, datetime(2026, 5, 12, 17, 30, tzinfo=timezone.utc)))
+        self.assertFalse(in_quiet_hours(user, datetime(2026, 5, 12, 19, 0, tzinfo=timezone.utc)))
 
 
 if __name__ == "__main__":

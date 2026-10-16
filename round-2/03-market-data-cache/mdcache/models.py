@@ -8,7 +8,7 @@ class Quote:
     bid: Decimal
     ask: Decimal
     last: Decimal
-    timestamp: float  # epoch seconds
+    timestamp: float
     stale: bool = False
 
     @property

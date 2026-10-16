@@ -1,34 +1,76 @@
-# 17 · Margin Call Calculator: interviewer notes
+# R1-17 · Prime Brokerage Margin Engine: Interviewer Guide
 
-Code: `margin/`. Shape: lookup table + an override rule with a strict threshold, the right denominator, a sign-sensitive formula, round-up, ordered greedy liquidation.
+~285 lines in `margin/`. One passing test (a well-collateralised account). The spec's example **passes** on the buggy code; every
+bug needs an extra ingredient (shorts, staleness, an odd shortfall, deposit timing).
+
+## Session plan (60 min)
+0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
-
-| Topic | Answer |
+| Question | Answer |
 |---|---|
-| Concentration denominator | Gross **long** MV only. Shorts and cash excluded. |
-| Exactly 40% | Not concentrated ("more than"). |
-| Short haircut | Requirement = 130% of |short MV| (the 100% to buy back + 30% buffer). |
-| Positive cash | Counts fully as collateral. |
-| Rounding the call | Always **up** to the next $100. A $16,040 shortfall → $16,100. |
-| Liquidation recalculating concentration | No: use the pre-sale haircuts (spec). |
-| Partial cover (not enough longs) | Return what's possible; flag it as a risk. |
+| Concentration denominator | Gross **long** MV only. |
+| Exactly 40% | Not concentrated. |
+| Stale = ? | Price date earlier than run date − 1 day (a price from yesterday is fine). |
+| Order: concentration then staleness | Concentration first (max with 50%), then +10 points. A concentrated stale position is 60%. |
+| Short requirement | 130% of |short MV| (principal + 30%). |
+| Call rounding | Always up to the next $100. |
+| Deposits before a call | Don't count toward meeting it (they're already in the excess). |
+| Second run with an open call | Keep the existing call (don't issue another). |
 
-## Planted issues
+## Code map
+| Module | Responsibility |
+|---|---|
+| `services/prices.py` | Publish and look up prices (latest on/before date) |
+| `services/valuation.py` | Lines, haircuts (concentration, staleness), collateral / requirement / excess |
+| `services/calls.py` | Call issuance, deposits, meeting calls |
+| `services/liquidation.py` | Liquidation plan (correct) |
+| `store.py`, `api.py`, `app.py` | Storage, facade, wiring |
 
-| ID | Location | What is wrong | Fix | Failing test |
-|---|---|---|---|---|
-| B1 | `calc.py::haircuts` | Denominator = net MV (shorts reduce it) | gross **long** MV | longs A 30k / B 38k / C 32k + short 20k: B is 38%, so 25% |
-| B2 | `calc.py::haircuts` | `>=` 40% | `>` | position exactly 40% → normal haircut |
-| B3 | `calc.py::margin_call` | `ROUND_HALF_UP` to the nearest 100 | `ROUND_CEILING` (or `ROUND_UP`) | shortfall 16,040 → call 16,100 |
-| B4 | `models.py::SHORT_REQUIREMENT` / `calc.py::requirement` | Uses 30%, not 130% | `abs(mv) * (1 + 0.30)` | 10k short, 0 cash → requirement 13,000 |
-| B5 | `liquidation.py::liquidation_plan` | Sorts lowest haircut first (ascending) | sort by `(-haircut, -mv)` | spec example plan: `[("AAPL", 160)]` |
-| G1 | `calc.py::collateral` | Positive cash ignored | `+ max(cash, 0)` | cash +5,000, no positions → collateral 5,000 |
+## Planted bugs (5)
 
-Note that `SHORT_REQUIREMENT = 0.30` is named like a *buffer*, and the spec says 130%. Whether to change the constant or the formula is a judgement call; either is fine if explained.
+### B1 · Concentration measured against net MV
+- **Where:** `valuation.py::lines`: `base` sums **all** lines including shorts.
+- **Test:** longs A 30k, B 38k, C 32k (equities), short S 20k → B is 38% of gross long → 25% → collateral **75,000** (buggy 65,500).
+- **Fix:** sum only `qty > 0`.
 
-**Red herring:** `-(-remaining // per_share)` is a correct ceil for positive Decimals. The agent may flag it as "unclear". Fine to rename, not a bug.
+### B2 · Short requirement missing the principal
+- **Where:** `valuation.py::summary`: `|MV| × 0.30`.
+- **Test:** short 100 @ $100, no cash → requirement **13,000**.
+- **Fix:** `× (1 + SHORT_ADD_ON)`.
 
-## Follow-ups
-- Why should the plan be deterministic (tie-breaks)? (Auditability, and so reruns produce the same instructions.)
-- What invariant should the plan satisfy? (After the sales, the excess is ≥ 0, unless the longs are exhausted.)
+### B3 · Call rounded to the nearest $100
+- **Where:** `calls.py::round_call`: `ROUND_HALF_UP`.
+- **Test:** the example with cash −$100,040 → call **$16,100** (buggy $16,000).
+- **Fix:** `ROUND_CEILING`.
+
+### B4 · Staleness surcharge swallowed by concentration
+- **Where:** `valuation.py::lines`: the surcharge is added **before** `max(haircut, 50%)`.
+- **Test:** the example with AAPL's last price two days old → 60% → collateral 76,000 → call **$24,000** (buggy $16,000).
+- **Fix:** apply concentration first, then add the surcharge.
+
+### B5 · Old deposits meet new calls
+- **Where:** `calls.py::_check_met`: sums **all** deposits ever.
+- **Test:** deposit $5,000, then a $16,000 call is issued, then deposit $12,000 → call still OPEN.
+- **Fix:** only deposits with `on >= call.issued_on` (and made after it).
+
+Hints for each: (1) the spec sentence; (2) "build an account where the two readings differ".
+
+## Red herrings
+- Liquidation ordering and per-share improvement: correct.
+- `latest` picks the newest price on or before the run date: correct.
+
+## Questions about the candidate's fixes (data structures)
+- **Prices:** "`latest` filters every historical price per lookup: O(p). With years of daily prices?" (Keep prices sorted by date per symbol and `bisect_right`: O(log p). Or keep just the latest per symbol for the nightly run.)
+- **B5:** "Deposits per account are a list; meeting a call sums a filter. Alternative?" (Track `deposited_since_call` on the call itself, incremented on deposit: O(1).)
+- **Open call:** "`open_call` scans the account's call history. Better?" (Store the open call id on the account. Invariant: at most one open call, enforced in one place.)
+- **Liquidation:** "Sorting longs is O(n log n). If you only need enough sales to cover the call?" (A heap and pop until covered: O(n + k log n).)
+
+## Feature requests
+1. **"Cross-margining: two accounts of the same client share collateral."** Strong answer: a client-level aggregation; concentration computed at client level; calls issued at client level; which account's positions to liquidate.
+2. **"Intraday margin runs every hour with real-time prices."** Strong answer: incremental valuation on price ticks (only affected accounts: index accounts by symbol); call idempotency within a day.
+3. **"Call deadline: an unmet call after 2 business days triggers automatic liquidation."** Strong answer: business-day calendar; a scheduler; partial cures reduce the liquidation amount; audit trail of actions.
+
+## Scoring signals
+- **Strong:** notices the example passes, then adds one ingredient at a time; tests deposit timing; asks about rule order (concentration vs staleness).
+- **Weak:** only long-only, fresh-price scenarios.

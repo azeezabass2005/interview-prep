@@ -17,6 +17,6 @@ class Booking:
     room_id: str
     organizer: str
     attendees: Tuple[str, ...]
-    start: datetime  # naive UTC
-    end: datetime  # naive UTC
+    start: datetime
+    end: datetime
     series_id: Optional[str] = None

@@ -1,37 +1,31 @@
-# Market Data API Quotas
+# Market Data API Metering
 
-A market-data API limits how fast each client can call it, using a **token bucket** per client. The code in `quota/` implements the rules below.
-Clients on paid plans say they get throttled when they shouldn't, and free clients get bursts they shouldn't.
+A market-data API rate-limits each client with a **token bucket** and meters usage for **monthly billing**. The repository contains the
+limiter, the usage meter and the invoicing logic.
 
-## Rules
+## Plans
 
-- Each client is on a plan:
+| Plan | Bucket capacity | Refill (tokens/s) | Monthly allowance (units) | Monthly fee | Beyond allowance |
+|---|---|---|---|---|---|
+| FREE | 10 | 1 | 10,000 | $0 | requests rejected |
+| PRO | 100 | 20 | 1,000,000 | $500 | **$0.001 per unit** of overage |
 
-| Plan | Capacity (tokens) | Refill (tokens/second) |
-|---|---|---|
-| FREE | 10 | 1 |
-| PRO | 100 | 20 |
-| ENTERPRISE | 1,000 | 200 |
+Endpoints cost tokens and units: `/quote` 1, `/history` 5, `/bulk` 20.
 
-- Each endpoint costs tokens: `/quote` 1, `/history` 5, `/bulk` 20.
-- A bucket starts **full**. Tokens refill **continuously** (fractions count) with elapsed time, but never above capacity.
-- A request is **allowed** if the bucket holds at least its cost; the cost is then removed. A **rejected** request costs nothing.
-- A rejection includes `retry_after`: seconds until enough tokens will exist, **rounded up to the next 0.1 s**.
-  If the cost is larger than the plan's capacity the request can **never** succeed, so `retry_after` is `None`.
-- **Plan changes** take effect immediately. Tokens carry over but are **capped at the new plan's capacity**.
+## Rate limiting
+
+- A bucket starts **full** and refills **continuously** (fractions count), never above capacity.
+- A request is **allowed** if the bucket holds at least its cost, which is then removed. A **rejected** request costs nothing.
+- A rejection includes `retry_after`: seconds until enough tokens exist, **rounded up to the next 0.1 s**. If the cost exceeds the
+  capacity, `retry_after` is `None`.
+- A plan change takes effect immediately; tokens carry over but are capped at the new capacity.
+
+## Metering and invoices
+
+- Every **allowed** request adds its cost to the client's usage for the current calendar month (UTC). Rejected requests are not metered.
+- FREE clients whose usage would exceed the allowance are rejected (with `retry_after = None`).
+- Invoice for a month = monthly fee + overage units × price (rounded half-up to the cent), where overage units = usage − allowance (never negative).
 
 ## Example
 
-FREE client at t = 0: `/history` → allowed (5 left), `/history` → allowed (0 left).
-At t = 0.5: `/quote` → **rejected**, 0.5 tokens available, `retry_after = 0.5`. At t = 1.0: `/quote` → allowed.
-
-## Candidate questions
-
-1. Identify anything in the rules that must be clarified before implementation.
-2. Explain how you would model plans, buckets and decisions.
-3. Outline the refill/consume logic and the tests you would want.
-4. Identify bugs or issues and fix them.
-
-```
-python -m unittest discover -s tests -v
-```
+FREE client at t = 0: `/history` → allowed (5 tokens left), `/history` → allowed (0 left). At t = 0.5: `/quote` → rejected, `retry_after = 0.5`.

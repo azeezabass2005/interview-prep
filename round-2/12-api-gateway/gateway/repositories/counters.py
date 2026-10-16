@@ -2,7 +2,6 @@ from ..db import Database
 
 
 class CounterRepository:
-    """Shared counters. `increment` is atomic and returns the new count."""
 
     def __init__(self, db: Database):
         self._db = db

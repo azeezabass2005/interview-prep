@@ -1,13 +1,12 @@
 import threading
 
 
-class PushSender:  # pragma: no cover - real integration
+class PushSender:
     def send(self, user_id: str, message: str) -> None:
         raise NotImplementedError("push gateway not available in the sandbox")
 
 
 class RecordingSender:
-    """Test double that records what was sent. Thread-safe."""
 
     def __init__(self):
         self.sent = []

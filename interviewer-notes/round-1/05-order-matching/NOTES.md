@@ -1,37 +1,83 @@
-# 05 · Mini Matching Engine: interviewer notes
+# R1-05 · Mini Exchange Matching Engine: Interviewer Guide
 
-Code: `engine/`. Shape: ordered rules (price, then time), partial fills with leftover carried, data-structure justification (dict of deques).
+~275 lines in `exchange/`. One passing test (a simple full cross). This is the most data-structure-heavy Round 1 exercise: expect and
+push for discussion of the book's structure.
+
+## Session plan (60 min)
+0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS deep-dive + feature request · 55–60 risks.
 
 ## PM answers
-
-| Topic | Answer |
+| Question | Answer |
 |---|---|
-| Self-trade: what happens? | The incoming order **skips** the same-trader resting order, which **stays on the book with its priority**. Matching continues with the next order. |
-| Remaining incoming after skipping everything | Rests on the book (even if it now crosses its own order; that's allowed). |
-| Market orders / IOC | Out of scope; limit orders only. |
-| Partial fill of the incoming then rest | Yes, the remainder rests at its limit price. |
-| Cancel of a partially filled resting order | Allowed; cancels the remainder. |
-| Prices | Integer cents; no tick size validation. |
-| Duplicate order ids | Assume unique (could ask: reject?). |
+| Self-trade (same member on both sides)? | Allowed for this exercise (out of scope). |
+| IOC that trades nothing | Status CANCELLED, nothing rests. |
+| IOC partially filled | Status after = CANCELLED for the remainder; fills stand. Report `filled`. |
+| Amend of quantity only, downwards | Keeps priority. Same quantity + same price = no-op (keeps priority). |
+| Amend to a better price that crosses | Doesn't trade; just rests (spec). |
+| Cancel a partially filled order | Allowed; cancels the remainder. |
+| Duplicate order id | Rejected. |
+| Prices | Integer cents; no tick check beyond > 0. |
 
-## Planted issues
+## Code map
+| Module | Responsibility |
+|---|---|
+| `engine.py` | submit / match / cancel / amend, order registry |
+| `book.py` | `BookSide`: price → deque of orders; best price; depth |
+| `tape.py` | Trades, last price, VWAP (correct) |
+| `validation.py`, `api.py`, `app.py` | Input checks, facade, wiring |
 
-| ID | Location | What is wrong | Fix | Failing test |
-|---|---|---|---|---|
-| B1 | `matching.py::submit` | Fill price = `incoming.price` | `resting.price` | Spec example: fills at 100, 100, 101 |
-| B2 | `book.py::BookSide.add` | `appendleft` makes each level LIFO | `append` | Two asks @100 (S1 then S2), buy 10: fills S1 |
-| B3 | `matching.py::submit` | `if not fills: rest`: a partially filled incoming order's remainder is dropped | `if incoming.remaining > 0: rest` | Buy 150 vs ask 100: bid depth {100: 50} |
-| B4 | `matching.py::submit` | A partially filled resting order is re-queued at the **back** (`level.append`) | `level.appendleft(resting)` | Asks S1 100, S2 100 @100; buy 30, buy 30: both fill S1 |
-| B5 | `book.py::BookSide.cancel` | Empty level left behind, so `best_price()` returns a ghost price | delete the level when empty | Cancel only order @101 with another @102: best ask = 102 |
-| G1 | `matching.py::submit` | Self-trade prevention missing entirely | skip same-trader resting orders, restore them in place | alice rests S1 @99, bob S2 @100; alice buys @100: fills S2 only, S1 stays |
+## Planted bugs (5)
 
-The B4 hidden test fails on the original code for two reasons (B2 also reorders the level). Good candidates notice this when they write it and fix B2 first.
+### B1 · Partially filled resting order loses its place
+- **Where:** `engine.py::_match`: it always `popleft()`s the resting order and re-`append`s it if not finished, so it goes to the back.
+- **Test:** S1 100 and S2 100 at 100 (S1 first). Buy 30 → S1. Buy 30 again → must be S1 again (buggy: S2).
+- **Fix:** only `popleft()` when `resting.remaining == 0`.
+- **Hints:** (1) "Partially fill the first order in a level, then send another buy." (2) "What happens to `resting` after a partial fill?"
 
-**Red herring:** `max(self._levels)` / `min(...)` is O(levels) per lookup. That's a performance remark (heap or sorted container), not a correctness bug. Accept it as "noted, not fixing" and watch whether they refrain from rewriting.
+### B2 · Trades priced at the incoming order's price
+- **Where:** `engine.py::_match`: `Trade(..., incoming.price, ...)`.
+- **Test:** the spec example: prices 100, 100, 101 (buggy: all 101).
+- **Fix:** `resting.price`.
+- **Hints:** "Turn the spec example into a test and check prices, not just quantities."
 
-**G1 is the hard one.** Popping the same-trader order and pushing it back to the end breaks priority (the same mistake as B4). Watch for that in the agent's proposal.
+### B3 · IOC remainders rest on the book
+- **Where:** `engine.py::submit`: rests any remainder, regardless of `order_type`.
+- **Test:** IOC buy 150 @ 100 vs ask 100 @ 100 → 100 filled, nothing on the bid side, order status CANCELLED.
+- **Fix:** `if order.remaining > 0: if order.order_type == IOC: order.status = CANCELLED else: rest`.
+- **Hints:** "Submit an IOC larger than the liquidity, then look at the book depth."
 
-## Follow-ups
-- Why a dict of deques? (O(1) level lookup, O(1) FIFO pop.) What does `deque.remove` cost in cancel? (O(n) in the level. Could index by id with lazy deletion.)
-- How would you get O(log n) best price? (Heap with lazy deletion, or sorted dict.)
-- What invariant should hold after every submit? (No crossed book unless self-trade, no empty levels, `resting` index == orders on book.)
+### B4 · Amend down loses time priority
+- **Where:** `engine.py::amend`: always removes and re-adds the order (to the back) and takes a new `seq`.
+- **Test:** S1 then S2 at 100; amend S1 from 100 to 60; buy 10 → fills S1 (buggy: S2). Also: an amend **up** must lose priority.
+- **Fix:** if the price is unchanged and the quantity isn't increasing, update the quantity in place; otherwise move it.
+- **Hints:** "The spec has three amend cases. Test each."
+
+### B5 · Cancelling the last order in a level leaves a ghost level
+- **Where:** `engine.py::cancel`: `remove` without `drop_level_if_empty`. The next match finds an empty deque at the best price and crashes (`IndexError`), and `best_price` is wrong.
+- **Test:** ask 101 and ask 102; cancel the 101 order; buy @102 → trades with the 102 ask.
+- **Fix:** call `drop_level_if_empty(order.price)` after removing.
+- **Hints:** "Cancel the only order at the best price, then trade."
+
+## Red herrings
+- `amend` refusing `quantity <= filled` is per spec.
+- VWAP uses Decimal with half-up rounding (correct).
+- `add_front` is unused (dead code). Fine to point out, not a bug.
+
+## Questions about the candidate's fixes (data structures)
+- **B1/B4:** "Each level is a `deque`. What's the cost of `popleft`? Of `remove(order)` in cancel/amend?" (O(1); O(k) in the level.) "How would you make cancel O(1)?" (An intrusive doubly linked list per level with a dict order_id → node; or lazy deletion: mark cancelled, skip when popped.) "Trade-offs of lazy deletion?" (Depth/size become wrong unless you track live quantity; memory until compaction.)
+- **B5:** "`best_price()` is `min/max` over a dict's keys: O(L) per call, called on every match iteration. Better?" (Heap of prices with lazy deletion → O(log L); or a sorted container / skip list; real exchanges use arrays indexed by tick for O(1).) "What breaks with a heap when a level empties?" (Stale entries: pop until the top level exists.)
+- **B3:** "Where should the IOC rule live: book, engine or validation?" (Engine; it's a lifecycle rule, not book structure.)
+- **Registry:** "`self.orders` keeps every order forever. Memory growth?" (Archive finished orders; keep live ones only.)
+
+## General complexity questions
+- Submit with k fills: O(k × cost of best price) → O(k·L) as written, O(k log L) with a heap.
+- Depth snapshot sorts all levels: O(L log L) per call. Alternative: keep levels sorted.
+
+## Feature requests
+1. **"Market orders: trade at any price, never rest; reject if the book is empty."** Strong answer: price = ±infinity sentinel or a separate code path; protection against walking the book too far (price collar); IOC-like remainder handling.
+2. **"Self-trade prevention: an incoming order must not trade with the same member's resting order; cancel the resting one."** Strong answer: where in the loop to check; preserve other orders' priority; tests with interleaved members.
+3. **"Stop orders: become a market/limit order when the last trade price crosses a trigger."** Strong answer: trigger index by price (two heaps: buy-stops by trigger asc, sell-stops desc); cascading triggers after each trade; ordering among simultaneously triggered stops.
+
+## Scoring signals
+- **Strong:** tests the spec example (finds B2), deliberately tests every amend clause, can discuss deque vs linked list vs heap trade-offs.
+- **Weak:** rewrites the book as a sorted list "to be safe"; doesn't consider IOC at all.

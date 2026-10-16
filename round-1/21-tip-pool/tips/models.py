@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import date, datetime
 from decimal import Decimal
 
 
@@ -6,10 +7,13 @@ from decimal import Decimal
 class Shift:
     employee: str
     role: str
-    hours: Decimal
+    start: datetime
+    end: datetime
 
 
 @dataclass(frozen=True)
-class NightTips:
+class Declaration:
+    day: date
+    service: str
     card: Decimal
     cash: Decimal

@@ -1,41 +1,41 @@
-# Margin Call Calculator
+# Prime Brokerage Margin Engine
 
-A prime broker lends clients cash against the securities in their account. Each night a risk job checks every account and,
-if the collateral isn't enough, issues a **margin call** and a suggested **liquidation plan**. The code in `margin/` implements the rules below.
+A prime broker lends clients cash against the securities they hold. Every evening a **margin run** values each account using the latest
+prices, and issues a **margin call** if collateral falls short. Clients cure calls by depositing cash. The repository contains the margin engine.
 
-## Rules
+## Valuation
 
-- **Market value (MV)** = quantity × price. Long positions have positive quantity, shorts negative.
-- **Haircut** by asset class (the fraction of a long position's value the broker won't lend against):
+- **Market value (MV)** = quantity × latest price. Longs have positive quantity, shorts negative.
+- **Haircut** by asset class: EQUITY **25%**, ETF **15%**, BOND **10%**.
+- **Concentration:** a long position worth **more than 40%** of the account's **gross long MV** (sum of long MVs) gets at least a **50%** haircut.
+- **Stale prices:** if a security's latest price is dated **before the previous calendar day** relative to the run date, add **10 percentage
+  points** to its haircut (after the concentration rule).
+- **Collateral** = Σ long MV × (1 − haircut) + cash if positive.
+- **Requirement** = loan (−cash, if cash is negative) + Σ |short MV| × **130%**.
+- **Excess** = collateral − requirement.
 
-| Asset class | Haircut |
+## Calls
+
+- If excess is negative, a **margin call** is issued for −excess **rounded up to the next $100**, unless the account already has an open call.
+- A call is **met** when cash **deposited after the call was issued** adds up to at least the call amount, or when a later run shows
+  excess ≥ 0.
+
+## Liquidation plan
+
+For an unmet call, suggest whole shares to sell, **highest haircut first** (ties: larger MV first). Selling one share improves excess by
+price × haircut. Sell only as many as needed.
+
+## Data model
+
+| Entity | Fields |
 |---|---|
-| EQUITY | 25% |
-| ETF | 15% |
-| BOND | 10% |
-
-- **Concentration:** a long position worth **more than 40%** of the account's **gross long market value** (sum of long MVs)
-  gets a **50%** haircut instead.
-- **Collateral** = Σ (long MV × (1 − haircut)) + **cash, if positive**.
-- **Requirement** = **loan** (−cash, if cash is negative) + Σ (|short MV| × **130%**).
-- **Excess** = collateral − requirement. If excess is negative, the **margin call** is −excess **rounded up to the next $100**.
-- **Liquidation plan:** to cover a call, sell **whole shares** of long positions, **highest haircut first** (ties: larger MV first).
-  Selling one share improves excess by price × haircut. Sell only as many shares as needed. Use the haircuts computed *before* any sale.
+| Security | symbol, asset class |
+| Price | symbol, date, price |
+| Account | account id, cash, positions (symbol → quantity) |
+| Call | account, issued on, amount, status (OPEN / MET) |
+| Deposit | account, date, amount |
 
 ## Example
 
-Cash −$100,000. Longs: AAPL (equity) 400 @ $200 = $80,000 · TLT (bond) 300 @ $100 = $30,000 · SPY (ETF) 50 @ $400 = $20,000.
-
-Gross long MV = $130,000. AAPL is 61.5% → haircut **50%**. Collateral = 40,000 + 27,000 + 17,000 = $84,000. Requirement = $100,000.
-Excess = −$16,000 → **call $16,000**. Plan: sell **160 AAPL** (each share improves excess by $100).
-
-## Candidate questions
-
-1. Identify anything in the rules that must be clarified before implementation.
-2. Explain how you would model accounts, positions and the result.
-3. Outline the calculation and the tests you would want.
-4. Identify bugs or issues and fix them.
-
-```
-python -m unittest discover -s tests -v
-```
+Cash −$100,000; AAPL 400 @ $200, TLT 300 @ $100, SPY 50 @ $400 (all prices from the run date). Gross long MV $130,000; AAPL is 61.5% → 50%.
+Collateral 40,000 + 27,000 + 17,000 = $84,000; requirement $100,000 → **call $16,000**. Plan: **sell 160 AAPL**.

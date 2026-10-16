@@ -2,7 +2,6 @@ from datetime import datetime, timedelta
 
 
 class FakeClock:
-    """UTC, naive (the server convention)."""
 
     def __init__(self, now: datetime):
         self.current = now

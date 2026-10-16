@@ -5,9 +5,9 @@
 
 | Folder | Count | Format |
 |---|---|---|
-| `round-1/` | 30 | **Spec + small codebase.** A business-rule spec (constants, stages, tiers, splitting/rollover, a worked example, deliberate ambiguity) and a small Python package that claims to implement it but has planted **bugs** and **gaps**. Includes an incomplete test suite. |
+| `round-1/` | 30 | **Spec + codebase.** A `SPEC.md` describing a business system (rules, data model, worked example; no questions, no tickets) and a multi-module Python package (models, store, services, API, reporting; ~150–450 lines, no comments) that claims to implement it. Each has **exactly 5 planted bugs** where the code doesn't match the spec, and only **one passing test**. You find the bugs by writing tests from the spec. |
 | `round-2/` | 20 | **README + tickets + multi-module service.** API → services → repositories → SQLite, plus noise modules. Four realistic tickets per service (bug reports / client complaints with steps to reproduce and acceptance criteria). Several are concurrency problems across instances; several have **acceptance criteria that blame the wrong root cause**; each has related issues that are **out of scope**. |
-| `interviewer-notes/` | 50 | The answers: PM answers to clarifying questions, every planted issue (file, function, why, minimal fix), the invariant and option table for each ticket, traps, follow-up questions, `hidden_tests.py` and reference `fixes.py`. |
+| `interviewer-notes/` | 50 | The interviewer's guide: session timeline, PM answers to clarifying questions, code map, **every planted bug** (location, symptom, root cause, minimal fix, the test to write, hints), red herrings, **data-structure and complexity questions about the candidate's fixes** (alternatives, time/space trade-offs), **feature requests** to discuss after the fixes, scoring signals, plus `hidden_tests.py` and reference `fixes.py`. |
 
 Everything is Python 3 **standard library only** (no installs, the same constraint as the real interview). Tests use `unittest`.
 
@@ -29,8 +29,10 @@ python mock.py start 2 01           # a specific round-2 exercise (01 = the work
 at the end. Open that folder in your IDE with your agent (Copilot / Claude Code / Cursor). Then:
 
 1. **5 min:** walk through your resume and one problem you solved, out loud (rounds 1 and 2 open with this).
-2. **Round 1 (45 min):** read `SPEC.md` and work the four candidate questions. **Round 2 (50 min):** read `README.md` and `tickets/`,
-   pick **one** ticket, take it all the way. Talk the whole time; record yourself if you can.
+2. **Round 1 (50 min):** read `SPEC.md`, summarise it, ask your clarifying questions, map the code with the agent, then hunt for
+   places where the code doesn't match the spec: write a failing test, explain it, make a minimal fix, repeat. The interviewer then asks
+   about the data structures in your fixes and gives you a feature request to design.
+   **Round 2 (50 min):** read `README.md` and `tickets/`, pick **one** ticket, take it all the way. Talk the whole time; record yourself if you can.
 3. Clarifying questions: say them out loud. Solo? `python mock.py pm <session>` prints the PM's answers (round 1) **without** the bug list.
    Round 2 has no PM sheet: state your assumption and question the acceptance criteria.
 4. Finish:
@@ -52,6 +54,8 @@ follow-up questions at the end, and fill in `SCORECARD.md` while you work.
 ## The workflow you're practising (from the workshop)
 
 **Round 1: read the spec → inspect the code → find gaps/bugs → fix + test**
+- Only one test exists and it passes; in many exercises even the spec's worked example passes on the buggy code. Derive edge cases from
+  every rule and boundary word in the spec ("at least", "more than", "on or before", "rounded down").
 - Summarise the spec into numbered requirements; list ambiguities. *"Do not look at the code yet."*
 - Map entities and data flow; ask the agent which requirements the tests **don't** cover.
 - Walk requirement by requirement: implemented / implemented wrongly / missing. Verify every agent claim in the code.
@@ -72,39 +76,39 @@ follow-up questions at the end, and fill in `SCORECARD.md` while you work.
 
 ## Exercise index
 
-### Round 1: spec + small codebase
-| # | Exercise | Domain |
+### Round 1: spec + codebase
+| # | Exercise | System |
 |---|---|---|
-| 01 | pot-luck | The workshop's own example: pooled cash drawing |
-| 02 | brokerage-commission | Tiered commission schedule and monthly statement |
-| 03 | parking-garage | Garage billing with grace, caps and early bird |
-| 04 | dividend-reinvestment | DRIP: entitlement, withholding, fractional shares |
-| 05 | order-matching | Price-time priority limit order book |
-| 06 | group-tab | Restaurant bill splitting |
-| 07 | tournament-prizes | Prize pool with guarantee, places paid and ties |
-| 08 | miles-ledger | Frequent-flyer miles with lots and expiry |
-| 09 | silent-auction | Sealed-bid second-price auction |
-| 10 | ride-fare | Ride-hailing fares, surge and cancellation |
-| 11 | ipo-allocation | Oversubscribed offering allocation |
-| 12 | bowling-score | Bowling scorekeeper |
-| 13 | payroll-overtime | Daily/weekly overtime payroll |
-| 14 | solar-net-metering | Electricity bill with solar credit banking |
-| 15 | card-statement | Credit card interest and minimum payment |
-| 16 | bond-accrued-interest | 30/360 accrued interest and settlement |
-| 17 | margin-call | Collateral haircuts and liquidation plan |
-| 18 | fx-converter | FX quotes with cross rates and spreads |
-| 19 | api-quota | Token-bucket API quotas |
-| 20 | hotel-rates | Hotel pricing and cancellation refunds |
-| 21 | tip-pool | Restaurant tip pool |
-| 22 | gradebook | Course grading policy |
-| 23 | fifo-inventory | FIFO inventory costing |
-| 24 | crowdfunding | All-or-nothing crowdfunding |
-| 25 | portfolio-rebalancer | Robo-advisor rebalancing |
-| 26 | parcel-shipping | Parcel shipping rates |
-| 27 | league-table | League standings and tie-breakers |
-| 28 | library-fines | Library loans and fines |
-| 29 | class-waitlist | Fitness class booking and waitlist |
-| 30 | capped-index | Capped market-cap index weights |
+| 01 | pot-luck | The workshop's own example, extended: multi-draw fundraiser with entries, limits, cancellations, rollover |
+| 02 | brokerage-commission | Brokerage fee engine: equity tiers, options, regulatory fee, busted trades, monthly statements |
+| 03 | parking-garage | Garage operations: gates, capacity with reserved spaces, validations, passes, pricing |
+| 04 | dividend-reinvestment | DRIP processor: share register, withholding by country, enrolment history, reinvestment |
+| 05 | order-matching | Mini exchange: limit and IOC orders, amend/cancel, trade tape, depth |
+| 06 | group-tab | Group expenses: four split modes, edits/deletes, payments, settle-up suggestions |
+| 07 | tournament-prizes | Card-room tournament: late registration, re-entries, eliminations, prize pool, bounties |
+| 08 | miles-ledger | Frequent flyer program: earning, status tiers, expiry, redemption, transfers |
+| 09 | silent-auction | Charity auction: proxy bidding, increment bands, soft close, invoices |
+| 10 | ride-fare | Ride-hailing billing: locked surge, trip lifecycle, wait time, promos, driver payouts |
+| 11 | ipo-allocation | IPO bookbuilding: price limits, retail/institutional tranches, amendments, allocation |
+| 12 | bowling-score | Bowling league: game scoring, handicaps, team points |
+| 13 | payroll-overtime | Weekly payroll run: shifts, meal breaks, rate changes, daily/weekly overtime |
+| 14 | solar-net-metering | Utility billing: cumulative registers, prorated tiers, banking, true-up |
+| 15 | card-statement | Credit card billing cycles: ADB interest, grace, payment allocation, fees |
+| 16 | bond-accrued-interest | Bond trade booking: schedules, holidays, 30/360 and ACT/360 accrued |
+| 17 | margin-call | Prime brokerage margin engine: haircuts, staleness, calls, deposits, liquidation |
+| 18 | fx-converter | FX payments: rate book, quotes with expiry, booking, daily limits |
+| 19 | api-quota | Market data API metering: token buckets, monthly allowances, invoices |
+| 20 | hotel-rates | Hotel reservations: inventory per night, rate plans, pricing, cancellation |
+| 21 | tip-pool | Restaurant tip pools: lunch/dinner pools, eligibility, weights, statements |
+| 22 | gradebook | Course gradebook: submissions, late penalties, excusals, letter grades |
+| 23 | fifo-inventory | Multi-warehouse FIFO inventory: shipments, transfers, returns, valuation |
+| 24 | crowdfunding | Crowdfunding: tiers, pledge changes, settlement with failed charges, fees |
+| 25 | portfolio-rebalancer | Robo-advisor: models, restrictions, rebalance planning |
+| 26 | parcel-shipping | Checkout shipping: two carriers, dim weight, surcharges, delivery estimates |
+| 27 | league-table | League standings: fixtures, corrections, tie-breakers, form guide |
+| 28 | library-fines | Library circulation: branch calendars, holds, renewals, fines |
+| 29 | class-waitlist | Fitness studio: plans and credits, priority waitlist, promotion, late cancels |
+| 30 | capped-index | Index rebalance: eligibility, float adjustment, iterative capping, turnover |
 
 ### Round 2: tickets + multi-module service
 | # | Exercise | Service |
@@ -140,8 +144,9 @@ follow-up questions at the end, and fill in `SCORECARD.md` while you work.
 - Also practise in the real environment: **HackerRank mock interviews** (named in the workshop).
 
 ## Honest caveats
-- Real Round 2 codebases are bigger (likely thousands of lines, possibly with a front end). These services are 300–750 lines so that
-  50 of them stay maintainable. The skill (don't read everything; trace one path) is the same.
+- Real codebases may be bigger (Round 2 likely thousands of lines, possibly with a front end). These are 150–750 lines so that 50 of them
+  stay verifiable. The skill (don't read everything; trace one path; derive tests from the spec) is the same.
+- None of the code has comments or docstrings, matching what candidates reported from the real interviews.
 - `round-2` exercises use `zoneinfo`, which needs the system time-zone database (standard on Linux/macOS).
 - Maintainer self-check: `python mock.py verify` proves for every exercise that the visible tests pass on the buggy code, every hidden
   check fails on it, and everything passes after the reference fixes.

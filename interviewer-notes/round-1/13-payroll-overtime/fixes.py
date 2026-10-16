@@ -1,25 +1,8 @@
 FIXES = [
-    ("payroll/hours.py",
-     "        hours = Decimal(int((shift.end - shift.start).total_seconds() // 3600))\n        totals[shift.end.date()] += hours",
-     "        hours = Decimal(int((shift.end - shift.start).total_seconds())) / 3600\n        totals[shift.start.date()] += hours"),
-    ("payroll/overtime.py",
-     """    for day, hours in sorted(day_hours.items()):
-        regular += min(hours, DAILY_REGULAR)
-        overtime += max(hours - DAILY_REGULAR, ZERO)
-        double += max(hours - DAILY_DOUBLE_AFTER, ZERO)
-
-    total = sum(day_hours.values(), ZERO)
-    weekly_overtime = max(total - WEEKLY_REGULAR, ZERO)""",
-     """    worked_days = [d for d, h in sorted(day_hours.items()) if h > 0]
-    seventh_day = worked_days[6] if len(worked_days) == 7 else None
-    for day, hours in sorted(day_hours.items()):
-        if day == seventh_day:
-            overtime += min(hours, DAILY_REGULAR)
-            double += max(hours - DAILY_REGULAR, ZERO)
-            continue
-        regular += min(hours, DAILY_REGULAR)
-        overtime += max(min(hours, DAILY_DOUBLE_AFTER) - DAILY_REGULAR, ZERO)
-        double += max(hours - DAILY_DOUBLE_AFTER, ZERO)
-
-    weekly_overtime = max(regular - WEEKLY_REGULAR, ZERO)"""),
+    ("payroll/services/overtime.py", "    overtime = max(hours - DAILY_REGULAR, ZERO)", "    overtime = max(min(hours, DAILY_DOUBLE_AFTER) - DAILY_REGULAR, ZERO)"),
+    ("payroll/services/overtime.py", "    total_hours = sum((d.hours for d in days), ZERO)\n    excess = max(total_hours - WEEKLY_REGULAR, ZERO)",
+     "    excess = max(sum((r[1] for r in rows), ZERO) - WEEKLY_REGULAR, ZERO)"),
+    ("payroll/services/timesheets.py", "hours[shift.end.date()] += shift_hours(shift)", "hours[shift.start.date()] += shift_hours(shift)"),
+    ("payroll/services/timesheets.py", "hours >= MEAL_BREAK_AFTER:", "hours > MEAL_BREAK_AFTER:"),
+    ("payroll/services/rates.py", "    latest = max(worker.rates, key=lambda r: r.effective)", "    latest = max(applicable, key=lambda r: r.effective)"),
 ]

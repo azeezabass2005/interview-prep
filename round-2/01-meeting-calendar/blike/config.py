@@ -1,5 +1,3 @@
-"""Service configuration. Values are defaults; ops can override them per environment."""
-
 BATCH_SIZE = 5
 
 WORKDAY_START_HOUR = 9

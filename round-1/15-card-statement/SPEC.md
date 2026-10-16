@@ -1,34 +1,38 @@
-# Credit Card Statement
+# Credit Card Billing Cycles
 
-A card issuer produces a statement at the end of each billing cycle. The code in `card/` implements the rules below.
-Cardholders say interest and minimum payments look off.
+A card issuer posts transactions to card accounts and closes a **billing cycle** each month, producing a statement with interest, fees and a
+minimum payment. The repository contains the posting and statement service.
 
-## Rules
+## Balances and transactions
 
-- A card carries two balances: **purchases** (APR **24%**) and **cash advances** (APR **29%**).
-- **Daily balances:** each day's transactions are applied, then that day's end-of-day balance is recorded.
-- **Interest** per balance = **average daily balance × APR / 365 × days in the cycle**, rounded half-up to the cent.
-  Cycles are 28–31 days long. A negative (credit) balance earns no interest.
-- **Grace period:** if the previous statement was **paid in full**, purchases accrue **no interest** this cycle.
-  Cash advances **always** accrue interest.
-- **Cash advance fee:** **5%** of the advance or **$10**, whichever is **greater**. It's added to the cash balance the same day.
-- **Payments** go to the balance with the **highest APR first**, then the rest to the other balance.
-- **New balance** = purchases + cash advances + interest.
-- **Minimum payment** = the greater of **$25** or **1% of the new balance + this cycle's interest**.
-  If the new balance is under $25, the minimum is the **whole balance**.
+A card has two balances: **purchases** (APR **24%**) and **cash advances** (APR **29%**). Transactions are posted with a date:
+- **PURCHASE** adds to purchases; **REFUND** reduces purchases.
+- **CASH** (cash advance) adds to cash advances, plus a fee of **5% or $10, whichever is greater**, posted the same day to the cash balance.
+- **PAYMENT** is applied to the balance with the **highest APR first**, then to the other.
+
+## Closing a cycle
+
+A cycle runs from the day after the previous close to the close date, inclusive; the number of days varies (28–31).
+1. Replay the cycle day by day: apply each day's transactions, then record each balance at the end of the day (never below zero for interest).
+2. **Interest** per balance = average daily balance × APR / 365 × days in the cycle, rounded half-up to the cent.
+3. **Grace period:** if the **previous** statement's balance was paid **in full by its due date**, purchases accrue no interest this cycle.
+   **Cash advances always accrue interest.**
+4. **Late fee:** if the payments received **on or before** the previous statement's due date are less than its minimum payment, a
+   **$30** late fee is charged on this statement.
+5. **Over-limit fee:** **$25**, at most once per cycle, if the total balance exceeded the credit limit at the end of any day.
+6. Interest is added to each balance; fees are added to purchases.
+7. **Minimum payment** = the greater of **$25** or **1% of the new balance + interest + fees**; if the new balance is below $25, the whole balance.
+8. The **due date** is **21 days** after the close date.
+
+## Data model
+
+| Entity | Fields |
+|---|---|
+| Account | account id, credit limit, purchase balance, cash balance |
+| Transaction | posted on, kind, amount |
+| Statement | cycle start/end, days, interest per balance, fees, new balance, minimum due, due date |
 
 ## Example
 
-30-day cycle, previous statement **not** paid in full, $1,000 purchase balance all cycle, nothing else:
-interest = 1,000 × 0.24 / 365 × 30 = **$19.73**, new balance $1,019.73, minimum = max(25, 10.20 + 19.73) = **$29.93**.
-
-## Candidate questions
-
-1. Identify anything in the rules that must be clarified before implementation.
-2. Explain how you would model balances, transactions and the statement.
-3. Outline the interest calculation and the tests you would want.
-4. Identify bugs or issues and fix them.
-
-```
-python -m unittest discover -s tests -v
-```
+First cycle Mar 1–30 (30 days), no previous statement (so no grace), $1,000 purchase on Mar 1, nothing else:
+interest = 1,000 × 0.24 / 365 × 30 = **$19.73**; new balance **$1,019.73**; minimum max(25, 10.20 + 19.73) = **$29.93**; due **Apr 20**.

@@ -5,7 +5,6 @@ from ..repositories.entries import EntryRepository
 
 
 class FraudMonitor:
-    """Flags accounts with many withdrawals in a short window. Never blocks; only records flags."""
 
     def __init__(self, entries: EntryRepository, clock):
         self._entries = entries

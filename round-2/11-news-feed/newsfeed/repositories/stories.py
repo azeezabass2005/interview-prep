@@ -21,7 +21,6 @@ class StoryRepository:
 
     def insert(self, canonical_url: str, original_url: str, headline: str, source: str,
                published_at: datetime, tags) -> Optional[int]:
-        """Returns the new story id, or None if the canonical URL already exists."""
         try:
             with self._db.transaction() as conn:
                 cur = conn.execute(

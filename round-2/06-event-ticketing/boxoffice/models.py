@@ -10,7 +10,7 @@ class Event:
     event_id: str
     name: str
     venue_tz: str
-    starts_at_local: datetime  # naive, venue local time
+    starts_at_local: datetime
     face_value_cents: int
 
 
@@ -20,7 +20,7 @@ class Seat:
     seat_id: str
     status: str
     held_by: Optional[str]
-    hold_expires_at: Optional[str]  # ISO string as stored
+    hold_expires_at: Optional[str]
     order_id: Optional[str]
 
 

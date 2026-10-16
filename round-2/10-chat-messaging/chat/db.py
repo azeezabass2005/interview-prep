@@ -24,7 +24,6 @@ CREATE TABLE IF NOT EXISTS messages (
     received_at     TEXT NOT NULL,
     UNIQUE (conversation_id, seq)
 );
--- retries look messages up by client id
 CREATE INDEX IF NOT EXISTS idx_messages_client ON messages (conversation_id, sender, client_msg_id);
 """
 

@@ -17,7 +17,6 @@ class RefundService:
         return (event.starts_at_local - self._clock.now()).total_seconds() / 3600
 
     def refund(self, order_id: str) -> int:
-        """Refund an order; returns the refunded amount in cents."""
         order = self._orders.get(order_id)
         if order is None or order.status != "PAID":
             raise NotFound(order_id)

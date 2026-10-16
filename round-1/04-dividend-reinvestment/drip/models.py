@@ -6,25 +6,44 @@ from decimal import Decimal
 @dataclass(frozen=True)
 class Account:
     account_id: str
-    resident: bool
-    drip_enrolled: bool
+    name: str
+    country: str
+
+
+@dataclass(frozen=True)
+class Movement:
+    account_id: str
+    security: str
+    on: date
+    shares: Decimal
+    reason: str
+
+
+@dataclass(frozen=True)
+class Enrolment:
+    account_id: str
+    security: str
+    effective_from: date
+    enrolled: bool
 
 
 @dataclass(frozen=True)
 class DividendEvent:
-    symbol: str
+    event_id: str
+    security: str
     record_date: date
     pay_date: date
     per_share: Decimal
     reinvest_price: Decimal
 
 
-@dataclass
-class DividendPayment:
+@dataclass(frozen=True)
+class Payment:
+    event_id: str
     account_id: str
     gross: Decimal
     withholding: Decimal
     fee: Decimal
     cash_paid: Decimal
     shares_bought: Decimal
-    residual: Decimal
+    leftover: Decimal

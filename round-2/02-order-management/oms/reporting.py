@@ -5,7 +5,6 @@ from .repositories.orders import OrderRepository
 
 
 def blotter(orders: OrderRepository, account: str) -> dict:
-    """End-of-day blotter: notional executed per symbol and order counts per status."""
     notional = defaultdict(Decimal)
     counts = defaultdict(int)
     for o in orders.for_account(account):

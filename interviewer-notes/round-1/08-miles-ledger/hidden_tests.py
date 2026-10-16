@@ -1,40 +1,46 @@
 import unittest
-from datetime import date
-from decimal import Decimal
 
-from miles.account import MilesAccount
-from miles.earning import miles_for_fare
-from miles.models import InsufficientMiles, Member
+from loyalty.app import build_app
 
 
-class HiddenMiles(unittest.TestCase):
+def member(api, mid):
+    api.join(mid, mid)
+
+
+def fly(api, fid, mid, on, fare):
+    status, body = api.fly({"flight_id": fid, "member_id": mid, "date": on, "fare": fare})
+    assert status == 201, body
+    return body
+
+
+class HiddenLoyalty(unittest.TestCase):
+    def setUp(self):
+        self.api, _ = build_app()
+        member(self.api, "m")
+
     def test_B1_gold_bonus_is_fifty_percent(self):
-        self.assertEqual(miles_for_fare(Decimal("412.80"), "GOLD"), 3090)
+        fly(self.api, "F0", "m", "2026-01-05", "10000")
+        self.assertEqual(fly(self.api, "F1", "m", "2026-01-10", "412.80"), {"base_miles": 2060, "bonus_miles": 1030})
 
-    def test_B2_cents_do_not_earn(self):
-        self.assertEqual(miles_for_fare(Decimal("100.90"), "BASE"), 500)
+    def test_B2_only_base_miles_qualify(self):
+        fly(self.api, "F0", "m", "2026-01-05", "5000")
+        fly(self.api, "F1", "m", "2026-01-10", "4000")
+        self.assertEqual(self.api.account("m", "2026-02-01")[1]["tier"], "SILVER")
 
     def test_B3_oldest_miles_spent_first(self):
-        account = MilesAccount(Member("m1", "BASE"))
-        account.earn(Decimal("200"), date(2024, 1, 10))
-        account.earn(Decimal("200"), date(2025, 1, 10))
-        account.redeem(1000, date(2025, 2, 1))
-        self.assertEqual(account.balance(date(2026, 2, 1)), 1000)
+        fly(self.api, "F0", "m", "2024-01-10", "200")
+        fly(self.api, "F1", "m", "2025-01-10", "200")
+        self.api.redeem("m", 1000, "2025-02-01")
+        self.assertEqual(self.api.account("m", "2026-02-01")[1]["balance"], 1000)
 
-    def test_B4_unusable_on_anniversary(self):
-        account = MilesAccount(Member("m1", "BASE"))
-        account.earn(Decimal("100"), date(2024, 3, 1))
-        self.assertEqual(account.balance(date(2026, 2, 28)), 500)
-        self.assertEqual(account.balance(date(2026, 3, 1)), 0)
+    def test_B4_expired_on_anniversary(self):
+        fly(self.api, "F0", "m", "2024-03-01", "100")
+        self.assertEqual(self.api.account("m", "2026-02-28")[1]["balance"], 500)
+        self.assertEqual(self.api.account("m", "2026-03-01")[1]["balance"], 0)
 
-    def test_B5_rejected_redemption_spends_nothing(self):
-        account = MilesAccount(Member("m1", "BASE"))
-        account.earn(Decimal("100"), date(2025, 1, 10))
-        with self.assertRaises(InsufficientMiles):
-            account.redeem(800, date(2025, 2, 1))
-        self.assertEqual(account.balance(date(2025, 2, 1)), 500)
-
-    def test_G1_platinum_never_expires(self):
-        account = MilesAccount(Member("m1", "PLATINUM"))
-        lot = account.earn(Decimal("100"), date(2020, 1, 10))
-        self.assertEqual(account.balance(date(2026, 1, 1)), lot.miles)
+    def test_B5_transfers_do_not_qualify(self):
+        member(self.api, "r")
+        fly(self.api, "F0", "m", "2026-01-05", "1000")
+        fly(self.api, "F1", "r", "2026-01-05", "4400")
+        self.api.transfer({"from": "m", "to": "r", "miles": 5000, "date": "2026-02-01"})
+        self.assertEqual(self.api.account("r", "2026-02-02")[1]["tier"], "BASE")

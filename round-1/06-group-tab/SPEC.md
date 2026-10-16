@@ -1,41 +1,48 @@
 # Group Tab
 
-A bill-splitting app divides a restaurant bill among friends. One person pays the restaurant;
-everyone else pays that person back. The code in `tab/` implements the rules below. Users say the numbers don't always add up.
+An app for friends who share costs (trips, flat bills, dinners). A group records **expenses** (who paid, how it's split) and **payments**
+(one member paying another back). The app shows each member's **balance** and suggests the fewest transfers to settle up. The repository
+contains the backend.
 
-## Rules
+## Money
 
-1. **Items:** each item has a price and the people who shared it. An item is split **equally** among its sharers.
-   A person's **subtotal** is the sum of their item shares.
-2. **Coupon:** an optional fixed amount off the bill, applied **before tax**.
-3. **Tax:** **8.875%** of the (discounted) subtotal, rounded half-up to the cent.
-4. **Tip:** a percentage of the **pre-tax, discounted subtotal** (default **18%**), rounded half-up to the cent.
-   Parties of **6 or more people** are charged an automatic **20%** gratuity instead.
-5. **Each person's share** of the final total (subtotal − coupon + tax + tip) is **proportional to their subtotal**.
-6. **No cent may be lost or invented:** shares must add up to the total exactly. Leftover cents from any split go
-   one cent at a time to people in **alphabetical order**.
-7. **Settle up:** everyone except the payer sends the payer one transfer for their share.
+All amounts are in cents. **No cent may be lost or invented:** the shares of an expense always add up to the expense amount exactly, and
+the group's balances always add up to zero.
 
-## Example
+## Splitting an expense
 
-alice, bob, carol. Pizza $30.00 (all three), Wine $20.00 (alice, bob), Salad $12.00 (carol). alice pays.
+| Split | Input | Rule |
+|---|---|---|
+| EQUAL | participants | Total ÷ number of participants, rounded down; leftover cents go one each to participants in **alphabetical** order. |
+| EXACT | amount per participant | Amounts must add up to the total, otherwise the expense is rejected. |
+| PERCENT | percentage per participant | Percentages must add up to 100. Each share is rounded down; leftover cents go one each to the participants with the **largest fractional remainder** (ties: alphabetical). |
+| SHARES | integer weight per participant | Like PERCENT, using weight ÷ total weight. Same leftover rule. |
 
-| | alice | bob | carol | total |
-|---|---|---|---|---|
-| subtotal | 20.00 | 20.00 | 22.00 | 62.00 |
-| tax (8.875%) | | | | 5.50 |
-| tip (18% of 62.00) | | | | 11.16 |
-| **total** | | | | **78.66** |
+Only group members can pay or participate.
 
-bob and carol each send alice their share. The three shares add up to exactly $78.66.
+## Balances
 
-## Candidate questions
+A member's balance = what they paid for others − what others paid for them:
+- for each expense: the payer is credited the full amount; each participant is debited their share;
+- for each payment *A pays B*: A's balance goes **up**, B's goes **down**.
 
-1. Identify anything in the rules that must be clarified before implementation.
-2. Explain how you would model items, people and the breakdown.
-3. Outline the calculation and the tests you would want.
-4. Identify bugs or issues and fix them.
+Expenses can be **edited** (replaced) or **deleted**; deleted expenses no longer affect balances.
 
-```
-python -m unittest discover -s tests -v
-```
+## Settling up
+
+Suggested transfers are produced greedily: repeatedly take the member who owes the most and the member who is owed the most, and transfer
+the smaller of the two amounts. Ties are broken alphabetically. Members with a zero balance are left out.
+
+## Data model
+
+| Entity | Fields |
+|---|---|
+| Group | group id, name, members |
+| Expense | expense id, payer, amount, description, split type, split details, shares, deleted? |
+| Payment | payment id, from member, to member, amount |
+
+## Examples
+
+- $10.00 split EQUAL between ann, bob, cy → ann 334, bob 333, cy 333.
+- $1.00 split PERCENT ann 33⅓ / bob 33⅓ / cy 33⅓ is invalid (doesn't add up to exactly 100); ann 50 / bob 25 / cy 25 → 50, 25, 25.
+- Balances ann +50.00, bob +30.00, cy −50.00, dan −30.00 → suggested: **cy → ann 50.00**, **dan → bob 30.00**.

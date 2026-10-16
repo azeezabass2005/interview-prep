@@ -1,35 +1,9 @@
 FIXES = [
-    ("utility/billing.py", "from .tariff import FIXED_CHARGE, TAX_RATE, TIERS",
-     "from .tariff import FIXED_CHARGE, TAX_RATE, TIERS, TRUE_UP_MONTH, TRUE_UP_RATE"),
-    ("utility/billing.py",
-     """        net = reading.consumed_kwh - reading.exported_kwh
-""",
-     """        if self.last_billed is not None and reading.month <= self.last_billed:
-            raise ValueError("bills must be produced in month order")
-        net = reading.consumed_kwh - reading.exported_kwh
-"""),
-    ("utility/billing.py",
-     """        energy = tiered_energy_charge(reading.consumed_kwh if net > 0 else 0)
-        if billable > 0 and self.bank_kwh > 0:
-            used = min(self.bank_kwh, billable)
-            energy -= used * TIERS[0][1]
-            billable -= used
-
-        energy = cents(energy)
-        tax = cents((energy + FIXED_CHARGE) * TAX_RATE)
-        self.last_billed = reading.month
-        return Bill(reading.month, billable, energy, tax, FIXED_CHARGE, energy + tax + FIXED_CHARGE)""",
-     """        if billable > 0 and self.bank_kwh > 0:
-            used = min(self.bank_kwh, billable)
-            self.bank_kwh -= used
-            billable -= used
-        energy = cents(tiered_energy_charge(billable))
-
-        tax = cents(energy * TAX_RATE)
-        payout = Decimal("0.00")
-        if reading.month.month == TRUE_UP_MONTH:
-            payout = cents(self.bank_kwh * TRUE_UP_RATE)
-            self.bank_kwh = 0
-        self.last_billed = reading.month
-        return Bill(reading.month, billable, energy, tax, FIXED_CHARGE, energy + tax + FIXED_CHARGE, payout)"""),
+    ("utility/services/meters.py", "    return current - previous", "    return (current - previous) % REGISTER_MAX"),
+    ("utility/services/tariff.py", "    return [None if size is None else size for size, _ in TIERS_PER_30_DAYS]",
+     "    return [None if size is None else size * days // 30 for size, _ in TIERS_PER_30_DAYS]"),
+    ("utility/services/billing.py", "            used = min(account.bank_kwh, net)\n",
+     "            used = min(account.bank_kwh, net)\n            account.bank_kwh -= used\n"),
+    ("utility/services/billing.py", "tax = cents((energy + service) * TAX_RATE)", "tax = cents(energy * TAX_RATE)"),
+    ("utility/services/billing.py", "if previous.read_on.month == TRUE_UP_MONTH:", "if reading.read_on.month == TRUE_UP_MONTH:"),
 ]

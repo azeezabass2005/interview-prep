@@ -5,7 +5,6 @@ from .repositories.counters import CounterRepository
 
 
 class LocalCounterStore:
-    """In-process counters. Fast; used in development."""
 
     def __init__(self):
         self._counts = defaultdict(int)
@@ -18,7 +17,6 @@ class LocalCounterStore:
 
 
 class DbCounterStore:
-    """Counters shared by every gateway instance through the database."""
 
     def __init__(self, repo: CounterRepository):
         self._repo = repo

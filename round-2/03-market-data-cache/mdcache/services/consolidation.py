@@ -5,7 +5,6 @@ from ..models import Quote, VenueQuote
 
 
 class VenueBook:
-    """Latest quote per (venue, symbol), as received from venue feeds."""
 
     def __init__(self):
         self._latest: Dict[tuple, VenueQuote] = {}

@@ -1,41 +1,38 @@
 import unittest
-from datetime import date, timedelta
-from decimal import Decimal as D
+from decimal import Decimal
 
-from library.account import PatronAccount
-from library.calendar import LibraryCalendar
-from library.loans import checkout, fine_for, renew
+from library.app import build_app
 
-MON = date(2026, 3, 2)
+
+def world():
+    api, store = build_app()
+    api.setup({"MAIN": []}, {"b1": ("BOOK", "MAIN"), "d1": ("DVD", "MAIN")}, ["ann", "bob"])
+    return api, store
 
 
 class HiddenLibrary(unittest.TestCase):
-    def test_B1_due_date_moves_off_closed_day(self):
-        cal = LibraryCalendar(holidays=[date(2026, 3, 9)])
-        self.assertEqual(checkout("NEW_RELEASE", date(2026, 3, 6), cal).due_on, date(2026, 3, 10))
+    def test_B1_sundays_closed(self):
+        api, _ = world()
+        api.checkout("ann", "d1", "2026-03-02")
+        self.assertEqual(api.check_in("d1", "2026-03-16")[1]["fine"], "6.00")
 
-    def test_B2_sundays_do_not_accrue(self):
-        cal = LibraryCalendar()
-        loan = checkout("DVD", MON, cal)
-        self.assertEqual(fine_for(loan, date(2026, 3, 16), cal), D("6.00"))
+    def test_B2_grace_forgives_one_day_only(self):
+        api, _ = world()
+        api.checkout("ann", "b1", "2026-03-02")
+        self.assertEqual(api.check_in("b1", "2026-03-25")[1]["fine"], "0.50")
 
-    def test_B3_grace_forgives_only_one_day(self):
-        cal = LibraryCalendar()
-        loan = checkout("BOOK", MON, cal)
-        self.assertEqual(fine_for(loan, date(2026, 3, 25), cal), D("0.50"))
+    def test_B3_renewal_from_due_date(self):
+        api, _ = world()
+        api.checkout("ann", "b1", "2026-03-02")
+        self.assertEqual(api.renew("b1", "2026-03-10")[1]["due"], "2026-04-13")
 
-    def test_B4_renewal_extends_from_due_date(self):
-        cal = LibraryCalendar()
-        loan = checkout("BOOK", MON, cal)
-        renew(loan, date(2026, 3, 10), cal)
-        self.assertEqual(loan.due_on, date(2026, 4, 13))
+    def test_B4_no_renewal_with_holds(self):
+        api, _ = world()
+        api.checkout("ann", "b1", "2026-03-02")
+        api.hold("bob", "b1")
+        self.assertEqual(api.renew("b1", "2026-03-10")[0], 409)
 
-    def test_B5_ten_dollars_blocks_borrowing(self):
-        account = PatronAccount("p1")
-        account.charge(D("10.00"))
-        self.assertFalse(account.can_borrow())
-
-    def test_G1_fine_capped_at_replacement_cost(self):
-        cal = LibraryCalendar()
-        loan = checkout("NEW_RELEASE", MON, cal)
-        self.assertEqual(fine_for(loan, MON + timedelta(days=60), cal), D("30.00"))
+    def test_B5_blocked_at_ten_dollars(self):
+        api, store = world()
+        store.patrons["ann"].balance = Decimal("10.00")
+        self.assertEqual(api.checkout("ann", "b1", "2026-03-02")[0], 409)

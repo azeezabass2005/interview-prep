@@ -1,13 +1,11 @@
 FIXES = [
-    ("auction/pricing.py", "if current is None or bid.amount_cents > current.amount_cents:",
-     "if current is None or bid.seq > current.seq:"),
-    ("auction/pricing.py", "return sorted(bids, key=lambda b: (b.amount_cents, b.seq), reverse=True)",
-     "return sorted(bids, key=lambda b: (-b.amount_cents, b.seq))"),
-    ("auction/pricing.py",
-     "    hammer = runner_up + INCREMENT_CENTS\n    return Result(lot.lot_id, winner.bidder, hammer, invoice_for(winner.amount_cents))",
-     "    floor = lot.reserve_cents if lot.reserve_cents is not None else OPENING_PRICE_CENTS\n"
-     "    hammer = max(min(runner_up + INCREMENT_CENTS, winner.amount_cents), floor)\n"
-     "    return Result(lot.lot_id, winner.bidder, hammer, invoice_for(hammer))"),
-    ("auction/house.py", "        if amount_cents <= 0:\n",
-     "        if lot.closed:\n            raise AuctionError(\"lot is closed\")\n        if amount_cents <= 0:\n"),
+    ("auction/services/pricing.py", "    return sorted(best.values(), key=lambda b: (b.maximum, b.seq), reverse=True)",
+     "    return sorted(best.values(), key=lambda b: (-b.maximum, b.seq))"),
+    ("auction/services/pricing.py", "runner_up + increment_for(winner.maximum)", "runner_up + increment_for(runner_up)"),
+    ("auction/services/bidding.py", "            lot.closes_at = lot.closes_at + timedelta(seconds=SOFT_CLOSE_SECONDS)",
+     "            lot.closes_at = now + timedelta(seconds=SOFT_CLOSE_SECONDS)"),
+    ("auction/services/invoices.py",
+     "        winning_bid = leading_bids(store.bids_for(lot.lot_id))[0]\n        premium = (winning_bid.maximum * PREMIUM_RATE)",
+     "        premium = (lot.hammer * PREMIUM_RATE)"),
+    ("auction/services/invoices.py", "        deductible = lot.hammer - lot.fmv", "        deductible = max(lot.hammer - lot.fmv, Decimal(\"0\"))"),
 ]

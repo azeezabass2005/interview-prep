@@ -23,7 +23,6 @@ class SchedulingService:
         self._scoring = scoring or ScoringService()
         self._notifier = notifier or Notifier(db, clock)
 
-    # ---- submission -------------------------------------------------------------------
 
     def _validate(self, payload: dict) -> None:
         for field in ("title", "sender", "duration_minutes", "urgency", "earliest", "latest"):
@@ -38,7 +37,6 @@ class SchedulingService:
             raise ValidationError("latest must be after earliest")
 
     def submit_request(self, requester: str, idempotency_key: str, payload: dict) -> MeetingRequest:
-        """Create a meeting request, or return the existing one for this requester + idempotency key."""
         self._validate(payload)
 
         existing = self._requests.find_by_key(requester, idempotency_key)
@@ -65,7 +63,6 @@ class SchedulingService:
     def get_request(self, request_id: str):
         return self._requests.get(request_id)
 
-    # ---- batch scheduling ---------------------------------------------------------------
 
     def run_batch(self, day: datetime) -> BatchResult:
         day_start = day.replace(hour=0, minute=0, second=0, microsecond=0)

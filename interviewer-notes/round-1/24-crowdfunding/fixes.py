@@ -1,20 +1,17 @@
 FIXES = [
-    ("crowd/campaign.py", "        amount = Decimal(amount)\n",
-     "        amount = Decimal(amount)\n        if self._clock.now() >= self.deadline:\n            raise PledgeRejected(\"campaign has ended\")\n"),
-    ("crowd/campaign.py", "self._claimed(tier) > t.limit", "self._claimed(tier) >= t.limit"),
-    ("crowd/campaign.py", "return sum((p.amount for p in self.pledges), ZERO)",
-     "return sum((p.amount for p in self.pledges if not p.cancelled), ZERO)"),
-    ("crowd/campaign.py",
-     """        funded = total > self.goal
-        active = [p for p in self.pledges if not p.cancelled]
-        platform = cents(total * PLATFORM_RATE)
-        processing = cents((total - platform) * PROCESSING_RATE + PER_PLEDGE_FEE * len(active))
-""",
-     """        funded = total >= self.goal
-        active = [p for p in self.pledges if not p.cancelled]
-        if not funded:
-            return Outcome(False, total, ZERO, ZERO, ZERO, [])
-        platform = cents(total * PLATFORM_RATE)
-        processing = cents(total * PROCESSING_RATE + PER_PLEDGE_FEE * len(active))
-"""),
+    ("crowd/services/pledges.py", "if limit is not None and self.claimed(c, tier) > limit:", "if limit is not None and self.claimed(c, tier) >= limit:"),
+    ("crowd/services/pledges.py", "        p.amount = self._validate(c, tier, amount)\n",
+     "        amount = self._validate(c, tier, amount)\n"
+     "        limit = c.tiers[tier].limit\n"
+     "        if tier != p.tier and limit is not None and self.claimed(c, tier) >= limit:\n"
+     "            raise Rejected(f\"{tier} is sold out\")\n"
+     "        p.amount = amount\n"),
+    ("crowd/services/settlement.py", "        pledges = list(c.pledges.values())", "        pledges = [p for p in c.pledges.values() if p.status == ACTIVE]"),
+    ("crowd/services/settlement.py", "        funded = total > c.goal", "        funded = total >= c.goal"),
+    ("crowd/services/settlement.py",
+     "            attempted = 0\n            for p in sorted(pledges, key=lambda p: p.pledge_id):\n                attempted += 1\n",
+     "            successful = 0\n            for p in sorted(pledges, key=lambda p: p.pledge_id):\n"),
+    ("crowd/services/settlement.py", "                    result[\"collected\"] += p.amount\n",
+     "                    result[\"collected\"] += p.amount\n                    successful += 1\n"),
+    ("crowd/services/settlement.py", "PER_CHARGE_FEE * attempted)", "PER_CHARGE_FEE * successful)"),
 ]

@@ -12,7 +12,6 @@ class ExecutionRepository:
         self._db = db
 
     def insert_if_new(self, e: Execution) -> bool:
-        """Store an execution; returns False if this exec_id was already stored."""
         try:
             with self._db.transaction() as conn:
                 conn.execute(

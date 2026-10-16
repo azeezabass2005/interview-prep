@@ -29,7 +29,6 @@ class LinkRepository:
         return _to_link(r) if r else None
 
     def lookup(self, code: str) -> Optional[Link]:
-        """Visitor-facing lookup; codes are case-insensitive."""
         with self._db.transaction() as conn:
             r = conn.execute(
                 "SELECT * FROM links WHERE lower(code) = lower(?) ORDER BY created_at DESC LIMIT 1", (code,)

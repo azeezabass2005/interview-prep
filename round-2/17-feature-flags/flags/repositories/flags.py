@@ -7,7 +7,7 @@ from ..models import Flag, Rule
 class FlagRepository:
     def __init__(self, db: Database):
         self._db = db
-        self.loads = 0  # how many times load_all hit the database (for monitoring)
+        self.loads = 0
 
     def load_all(self) -> Dict[str, Flag]:
         self.loads += 1

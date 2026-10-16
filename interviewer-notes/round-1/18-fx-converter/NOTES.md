@@ -1,34 +1,72 @@
-# 18 · FX Payments Converter: interviewer notes
+# R1-18 · FX Payments Service: Interviewer Guide
 
-Code: `fx/`. Shape: quote-direction conventions (invert or not), tiers keyed on the right base (USD equivalent), rounding direction, per-currency precision, freshness check.
+~220 lines in `fx/`. One passing test (EUR → USD, which hides the inversion, tier and rounding bugs). Quote → book is a small lifecycle
+with time-based rules, so a controllable clock is essential.
+
+## Session plan (60 min)
+0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
-
-| Topic | Answer |
+| Question | Answer |
 |---|---|
-| Tier base | USD equivalent of the **source** amount at mid. |
-| Tier boundaries | $10,000 exactly → 0.50% (as coded in `spread_for`). |
-| Same currency | Out of scope (nice: reject or 1:1 with no spread). |
-| Stale = | Older than 60 s: `now - at > 60 s`. Exactly 60 s is still fresh. |
-| Unknown currency minor units | Should be an error, not a silent default of 2. |
-| Inverting pairs | Yes: `USDJPY 151.20` means 1 JPY = 1/151.20 USD. |
+| Spread tier base | USD equivalent of the **source** amount at mid. |
+| Quote expiry exactly at 30 s | Still valid; 30.001 s is expired. |
+| Daily limit day | UTC calendar day of the booking. |
+| Limit check uses which amount? | The quote's USD equivalent (mid, before spread). |
+| Booking a quote twice | Rejected (already). |
+| Rates against non-USD pairs | Not supported (rejected at publish). |
 
-## Planted issues
+## Code map
+| Module | Responsibility |
+|---|---|
+| `services/rates.py` | Publish rates, USD per unit, staleness |
+| `services/quotes.py` | Spread tiers, cross mid, target rounding |
+| `services/payments.py` | Booking, daily limit, cancellation |
+| `store.py`, `api.py`, `app.py` | Storage, facade, wiring |
 
-| ID | Location | What is wrong | Fix | Failing test |
-|---|---|---|---|---|
-| B1 | `rates.py::usd_per_unit` | USD-base pairs (`USDJPY`, `USDCHF`) aren't inverted | `return 1 / rate` | 1,512 JPY → USD = 9.90 |
-| B2 | `convert.py::quote` | Spread tier chosen on the **source amount**, not its USD equivalent | `spread_for(amount * source_usd)` | 9,000 GBP → USD = 11,372.85 (0.5%) |
-| B3 | `convert.py::quote` | `ROUND_HALF_UP`; the spec says always down | `ROUND_DOWN` | 100 EUR → USD = 107.41 |
-| B4 | `currencies.py` | JPY missing, so it silently defaults to 2 decimals | add `"JPY": 0` (and ideally fail on unknown currencies) | `minor_units("JPY") == 0` |
-| G1 | `rates.py::usd_per_unit` | Stale check missing (`MAX_AGE` and `StaleRate` defined, never used) | raise `StaleRate` if `now - at > MAX_AGE` | rate set 61 s ago → raises |
+## Planted bugs (5)
 
-The spec's own example (EUR → JPY = ¥162,411) needs B1 and B4 fixed, and it's untested.
+### B1 · USD-base pairs not inverted
+- **Where:** `rates.py::usd_per_unit`: returns `rate` for `USDJPY`; 1 JPY should be 1/151.20 USD.
+- **Test:** 1,512 JPY → USD = **9.90**. The spec example (EUR → JPY) also needs it.
+- **Fix:** `return rate if base == currency else 1 / rate`.
 
-**Clue:** `MAX_AGE` and `StaleRate` are unused. The default in `minor_units` hides missing data. A candidate who says "I'd rather fail loudly here" is showing good judgement.
+### B2 · Spread tier chosen on the source amount
+- **Where:** `quotes.py::quote`: `spread_for(amount)` though `usd_equivalent` is computed on the line above.
+- **Test:** 9,000 GBP (= $11,430) → 0.5% → **11,372.85** USD.
+- **Fix:** `spread_for(usd_equivalent)`.
 
-**Red herring:** `mid = source_usd / target_usd` is correct once `usd_per_unit` is correct. Agents often "fix" this line instead of the real bug in `rates.py`. That's a great moment to see whether the candidate verifies the agent's claim.
+### B3 · Target amount rounded half-up
+- **Where:** `quotes.py::quote`: `ROUND_HALF_UP`.
+- **Test:** 100 EUR → USD: 107.415 → **107.41**.
+- **Fix:** `ROUND_DOWN`.
 
-## Follow-ups
-- Why Decimal for rates? What precision should the cross rate keep?
-- The rate lookup scans all pairs (O(pairs)). Better: index by currency. Worth it? With ~30 pairs, no.
+### B4 · Expired quotes can be booked
+- **Where:** `payments.py::book`: `QUOTE_TTL` is imported but never checked.
+- **Test:** quote, advance 31 s, book → 409.
+- **Fix:** `if now - quote.created_at > QUOTE_TTL: raise Rejected`.
+
+### B5 · Cancelled payments still use the daily limit
+- **Where:** `payments.py::booked_today`: doesn't filter `status == BOOKED`.
+- **Test:** book $40,000, cancel it, book another $40,000 → allowed.
+- **Fix:** skip cancelled payments.
+
+Hints: (1) the spec sentence; (2) "which constant/variable is computed but unused?" (B2, B4).
+
+## Red herrings
+- JPY minor unit 0 is configured correctly.
+- The staleness check in `usd_per_unit` is correct.
+
+## Questions about the candidate's fixes (data structures)
+- **B1:** "`usd_per_unit` scans all pairs per lookup. Better structure?" (Normalise at publish time into `dict currency → (usd_per_unit, at)`: O(1) lookups, and inversion happens once, in one place.)
+- **B5:** "`booked_today` scans a customer's whole payment history on every booking. Alternative?" (A running total per (customer, day), decremented on cancel. Or keep payments sorted by time and only scan today's.) "What about two bookings at once on two servers?" (Check-then-act race on the limit: needs an atomic conditional update in a shared store.)
+- **General:** "Why Decimal for rates, and how many decimal places should a cross rate keep?" (Decimal for exact, deterministic rounding; keep full precision until the final rounding.)
+
+## Feature requests
+1. **"Rate locks for corporates: a quote valid for 24 hours at a 0.10% premium."** Strong answer: TTL becomes part of the quote; the premium is added to the spread; exposure risk (stale rate for 24 h) needs a limit.
+2. **"Fee schedule: $3 flat fee for payments under $1,000 USD-equivalent, deducted from the source amount."** Strong answer: order of operations (fee before conversion); rounding; how it shows on the quote.
+3. **"Multi-leg payments: one source amount split across 3 recipients in different currencies."** Strong answer: one quote per leg vs a basket quote; all-or-nothing booking; the limit applies to the total.
+
+## Scoring signals
+- **Strong:** tests a USD-base currency (JPY) immediately; spots `QUOTE_TTL` unused; uses a fake clock for expiry and the daily limit.
+- **Weak:** only EUR/USD quotes.

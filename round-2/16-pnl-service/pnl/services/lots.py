@@ -17,7 +17,6 @@ def apply_splits(lots: List[Lot], splits: List[Split], as_of: date) -> None:
 
 
 def build_lots(fills: List[Fill], splits: List[Split]) -> Tuple[List[Lot], Decimal]:
-    """Replay fills in order. Returns (open lots, realized P&L)."""
     lots: List[Lot] = []
     realized = Decimal("0")
     applied = set()

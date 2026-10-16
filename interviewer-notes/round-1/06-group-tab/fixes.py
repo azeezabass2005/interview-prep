@@ -1,17 +1,12 @@
 FIXES = [
-    ("tab/allocation.py",
-     "    return {name: amount * weight // total_weight for name, weight in weights.items()}",
-     "    shares = {name: amount * weight // total_weight for name, weight in weights.items()}\n"
-     "    leftover = amount - sum(shares.values())\n"
-     "    for name in sorted(shares)[:leftover]:\n"
-     "        shares[name] += 1\n"
-     "    return shares"),
-    ("tab/calculator.py",
-     "    tax = _round_cents(subtotal * TAX_RATE)\n    discounted = subtotal - bill.coupon_cents\n",
-     "    discounted = subtotal - bill.coupon_cents\n    tax = _round_cents(discounted * TAX_RATE)\n"),
-    ("tab/calculator.py", "if party_size > AUTO_GRATUITY_PARTY_SIZE", "if party_size >= AUTO_GRATUITY_PARTY_SIZE"),
-    ("tab/calculator.py", "tip = _round_cents(Decimal(discounted + tax) * tip_percent / 100)",
-     "tip = _round_cents(Decimal(discounted) * tip_percent / 100)"),
-    ("tab/calculator.py", "        for person, amount in sorted(breakdown.shares.items())\n",
-     "        for person, amount in sorted(breakdown.shares.items())\n        if person != bill.payer\n"),
+    ("tab/splitting.py", "    base = amount // len(names)\n    return {name: base for name in names}",
+     "    base, leftover = divmod(amount, len(names))\n    return {name: base + (1 if i < leftover else 0) for i, name in enumerate(names)}"),
+    ("tab/splitting.py", "    for name in sorted(shares)[:leftover]:",
+     "    for name in sorted(shares, key=lambda n: (-(exact[n] - shares[n]), n))[:leftover]:"),
+    ("tab/services/balances.py", "        for expense in self._store.group_expenses(group_id):\n",
+     "        for expense in self._store.group_expenses(group_id):\n            if expense.deleted:\n                continue\n"),
+    ("tab/services/balances.py",
+     "            balance[payment.sender] -= payment.amount_cents\n            balance[payment.receiver] += payment.amount_cents",
+     "            balance[payment.sender] += payment.amount_cents\n            balance[payment.receiver] -= payment.amount_cents"),
+    ("tab/services/settle.py", "key=lambda m: (creditors[m], m))[0]", "key=lambda m: (-creditors[m], m))[0]"),
 ]

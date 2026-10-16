@@ -4,7 +4,6 @@ from .db import Database
 
 
 class AuditLog:
-    """Compliance requires every state change to be recorded."""
 
     def __init__(self, db: Database, clock):
         self._db = db

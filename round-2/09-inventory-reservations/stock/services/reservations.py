@@ -37,7 +37,6 @@ class ReservationService:
             self._reservations.create(cart_id, component, needed, expires)
 
     def sweep_expired(self) -> int:
-        """Release reservations past their expiry. Runs every minute."""
         released = 0
         for r in self._reservations.expired(self._clock.now()):
             self._skus.adjust_reserved(r.sku, -r.qty)

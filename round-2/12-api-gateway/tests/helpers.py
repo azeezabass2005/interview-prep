@@ -8,7 +8,6 @@ from gateway.proxy import Request
 from gateway.repositories.keys import ApiKeyRepository
 from gateway.repositories.tenants import TenantRepository
 
-# 2026-03-02 12:00:00 UTC, the start of a minute
 T0 = 1772452800.0
 
 

@@ -31,7 +31,6 @@ class JobRepository:
         return _to_job(r) if r else None
 
     def next_candidate(self, now: datetime) -> Optional[Job]:
-        """A due PENDING job, or a RUNNING job whose lease has expired."""
         with self._db.transaction() as conn:
             r = conn.execute(
                 """SELECT * FROM jobs
@@ -43,7 +42,6 @@ class JobRepository:
         return _to_job(r) if r else None
 
     def claim(self, job: Job, worker: str, now: datetime, lease_until: datetime) -> bool:
-        """Atomically take the job if nobody else changed it since we read it."""
         with self._db.transaction() as conn:
             cur = conn.execute(
                 """UPDATE jobs SET status = 'RUNNING', attempts = attempts + 1, lease_owner = ?,

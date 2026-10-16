@@ -1,31 +1,79 @@
-# 07 · Tournament Prize Pool: interviewer notes
+# R1-07 · Card Room Tournament Manager: Interviewer Guide
 
-Code: `prizes/`. Shape: guarantee overlay (order of rake vs guarantee), bracket boundaries, tie splitting with competition ranking, cent conservation.
+~300 lines in `tourney/`. One passing test (heads-up, with a bounty). The domain has a lot of moving parts (registration windows,
+re-entries, tie places), so the candidate must build multi-step scenarios. Helpers to generate a 20-player field are a good sign.
+
+## Session plan (60 min)
+0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
-
-| Topic | Answer |
+| Question | Answer |
 |---|---|
-| Rake vs guarantee order | Rake comes out of the fees first. The guarantee is a floor on the **prize pool** (the house pays the overlay; there is no rake on the overlay). |
-| "Up to 10" | Inclusive: exactly 10 entries pays 2 places; 30 pays 3. |
-| Bracket based on entries or unique players? | Entries (re-entries included). |
-| Tie straddling the last paid place | e.g. 3 tied for 5th with 5 places paid: they share the 5th place money three ways. |
-| Players in standings who are not in entries | Invalid input; out of scope. |
-| Leftover cents | 1st place gets the place-rounding leftover; tie-split leftovers go alphabetically within the tie. |
+| Rake vs guarantee order | Rake comes out of the prize side first; the guarantee is a floor on the **pool**. No rake on the overlay. |
+| "Up to 10 entries" | Inclusive: 10 entries pay 2 places. |
+| Late reg "through level 6" | Entries allowed while the current level ≤ 6. |
+| Max re-entries | 2 re-entries = 3 entries per player in total. |
+| Tie straddling the last paid place | Share only the paid places covered (e.g. 2 players tied for 5th of 5 paid split the 5th prize). |
+| Bounty on a re-entry | Each entry has its own $10 bounty; it's paid out on every elimination. |
+| Players who never finish (no-shows) | Out of scope. |
 
-## Planted issues
+## Code map
+| Module | Responsibility |
+|---|---|
+| `services/registration.py` | Create, enter/re-enter, late-reg window, start, levels |
+| `services/play.py` | Eliminations, bounty awards, finish |
+| `services/pool.py` | Prize side, rake, guarantee, payout brackets, place amounts |
+| `services/results.py` | Finishing places from final eliminations; prize allocation |
+| `models.py`, `store.py`, `api.py`, `app.py` | Data, storage, facade, wiring |
 
-| ID | Location | What is wrong | Fix | Failing test |
-|---|---|---|---|---|
-| B1 | `pool.py::prize_pool` | `max(fees, guarantee) - rake`: rake is taken from the overlay | `max(fees - rake, guarantee)` | 20 entries → 200,000 (buggy: 189,000) |
-| B2 | `pool.py::payout_percentages` | `entry_count < max_entries` excludes the boundary | `<=` | 10 entries → 2 places |
-| B3 | `payouts.py::compute_payouts` | Each tied player gets the full prize of the tie's first place | sum the places covered, split evenly | Tie for 2nd at 20 entries: 500.00 each |
-| B4 | `payouts.py::compute_payouts` | `place += 1` (dense rank) instead of `+= len(group)` | `place += len(group)` | the finisher after the 2-way tie is 4th: unpaid with 3 places |
-| B5 | `payouts.py::place_amounts` | Floors each place and drops the leftover cents | add `pool - sum(amounts)` to 1st | 61 entries: payouts sum to 301,950; 1st gets 120,781 |
+## Planted bugs (5)
 
-**Red herring:** the visible test `test_re_entries_count` is a weak test. It barely asserts anything. A good candidate calls that out ("this test would pass even if re-entries were ignored").
+### B1 · Rake taken from the guarantee overlay
+- **Where:** `pool.py::prize_pool`: `max(side, guarantee) - rake`.
+- **Test:** 20 entries → pool 200,000 cents (buggy 191,000). 61 entries → 247,050 (unaffected: a good control).
+- **Fix:** `max(side - rake, guarantee)`.
+- **Hints:** "Turn the spec's 20-entry example into a test."
 
-## Follow-ups
-- Why are standings a list of lists, not a dict of player → position? (The tie structure is explicit; a dict needs a positional convention.)
-- How do you guarantee "sum == pool" structurally? (Compute the last share as the remainder, or assert in code.)
-- What happens if the standings list fewer players than paid places? (Unpaid places: should money roll to the house? Ask.)
+### B2 · 10 entries pay 3 places
+- **Where:** `pool.py::percentages`: `entry_count < max_entries`.
+- **Test:** 10-entry tournament → exactly 2 players receive prizes; 30 entries → 3.
+- **Fix:** `<=`.
+- **Hints:** "Test the bracket edges in the table."
+
+### B3 · Tied players each get the best place's prize
+- **Where:** `results.py::compute_prizes`: `covered[0]` for every tied player.
+- **Test:** spec example: ben and cy tied for 2nd/3rd at 20 entries → 50,000 each; total prizes == pool.
+- **Fix:** `split_evenly(sum(covered), players)` (it's already imported and correct).
+- **Hints:** "Does the sum of prizes equal the pool when there's a tie?"
+
+### B4 · Third re-entry accepted
+- **Where:** `registration.py::enter`: `len(previous) > MAX_REENTRIES + 1` double-counts the original entry, so a 3rd re-entry (4th entry) is accepted.
+- **Test:** enter, bust, re-enter, bust, re-enter, bust → a further entry is rejected (409).
+- **Fix:** `len(previous) > MAX_REENTRIES` (previous entries include the original).
+- **Hints:** "How many entries can one player buy in total?"
+
+### B5 · Late registration closes one level early
+- **Where:** `registration.py::registration_open`: `t.level < LATE_REG_LAST_LEVEL`.
+- **Test:** at level 6 a new player can enter; at level 7 they can't.
+- **Fix:** `<=`.
+- **Hints:** "What does 'through the end of level 6' mean for level 6 itself?"
+
+## Red herrings
+- Leftover pool cents go to 1st (`place_amounts`): correct.
+- Bounty splitting among several pot winners: correct.
+- `final_eliminations` sorts hands descending: later hand = better place. Correct.
+
+## Questions about the candidate's fixes (data structures)
+- **B3/places:** "`final_eliminations` rebuilds a dict over every elimination at the end: O(E). If the director wants live standings after every hand, what would you maintain incrementally?" (A stack of elimination groups; places assigned as players bust: place = live players before the hand − group size + 1. O(1) per bust.)
+- **B4:** "`entries_for(player)` scans all entries: O(n) per registration, O(n²) for a big field. Fix?" (A dict player → list of entries; or a counter + current live entry.)
+- **Pool:** "Why integer cents and floor division rather than Decimal here?" (Exact, simpler; the leftover rule handles the rounding explicitly.)
+- **General:** "`live_players()` builds a sorted set every call. Where is it called, and what does it cost?" (In every elimination: O(n log n). Keep a set of live players updated on bust/enter.)
+
+## Feature requests
+1. **"Progressive knockout (PKO): half of each bounty goes to the eliminator in cash, half is added to the eliminator's own bounty."** Strong answer: bounty becomes per-player state that grows; split rounding; what happens to the winner's own bounty (they keep it); tests that total bounty money is conserved.
+2. **"Deal-making at the final table: the remaining players agree to split the remaining prize money by chip count (ICM-lite: chip-proportional)."** Strong answer: input chip counts; only unpaid places are redistributed; rounding and conservation; the director confirms.
+3. **"Multi-day tournament: day 1 flights A and B merge into day 2."** Strong answer: entries across flights pooled; a player bagging chips in two flights keeps the bigger stack; re-entry limits per flight vs total (ask PM).
+
+## Scoring signals
+- **Strong:** builds a field-generator helper; checks `sum(prizes) == pool` as an invariant (finds B3); probes every boundary word ("up to", "through", "at most").
+- **Weak:** only heads-up scenarios; misses registration rules entirely.
