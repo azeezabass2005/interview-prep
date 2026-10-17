@@ -1,9 +1,8 @@
 FIXES = [
-    ("utility/services/meters.py", "    return current - previous", "    return (current - previous) % REGISTER_MAX"),
-    ("utility/services/tariff.py", "    return [None if size is None else size for size, _ in TIERS_PER_30_DAYS]",
-     "    return [None if size is None else size * days // 30 for size, _ in TIERS_PER_30_DAYS]"),
-    ("utility/services/billing.py", "            used = min(account.bank_kwh, net)\n",
-     "            used = min(account.bank_kwh, net)\n            account.bank_kwh -= used\n"),
-    ("utility/services/billing.py", "tax = cents((energy + service) * TAX_RATE)", "tax = cents(energy * TAX_RATE)"),
-    ("utility/services/billing.py", "if previous.read_on.month == TRUE_UP_MONTH:", "if reading.read_on.month == TRUE_UP_MONTH:"),
+    ("netmeter.py", "    return current - previous", "    return (current - previous) % ROLLOVER"),
+    ("netmeter.py", "        threshold = TIER_KWH\n", "        threshold = round(Decimal(TIER_KWH * days) / TIER_DAYS)\n"),
+    ("netmeter.py", "            charged = net - banked_used", "            account.bank -= banked_used\n            charged = net - banked_used"),
+    ("netmeter.py", "        return (account.bank * TRUE_UP_RATE).quantize(CENT, rounding=ROUND_HALF_UP)",
+     "        payout = (account.bank * TRUE_UP_RATE).quantize(CENT, rounding=ROUND_HALF_UP)\n        account.bank = 0\n        return payout"),
+    ("netmeter.py", "            account.bank += exported", "            account.bank += -net"),
 ]

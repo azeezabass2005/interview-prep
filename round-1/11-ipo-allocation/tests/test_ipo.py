@@ -1,17 +1,13 @@
 import unittest
 
-from ipo.app import build_app
+from ipo import OrderBook
 
 
 class TestIpo(unittest.TestCase):
-    def test_undersubscribed(self):
-        api = build_app()
-        api.create("ACME", 10_000)
-        api.submit("ACME", {"investor": "r1", "shares": 500, "limit": "21"})
-        api.submit("ACME", {"investor": "i1", "shares": 3_000, "limit": "21"})
-        status, body = api.close("ACME", "20")
-        self.assertEqual(status, 200)
-        self.assertEqual(body["allocations"], {"i1": 3_000, "r1": 500})
+    def test_small_retail_order_filled(self):
+        book = OrderBook(1000)
+        book.place("r1", "ana", "RETAIL", 100)
+        self.assertEqual(book.allocate("20.00")["r1"], 100)
 
 
 if __name__ == "__main__":

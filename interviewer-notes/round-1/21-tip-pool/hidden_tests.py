@@ -1,50 +1,41 @@
 import unittest
+from datetime import date
+from decimal import Decimal
 
-from tips.app import build_app
+from tips import TipPool
 
-DAY = "2026-03-04"
-
-
-def shift(api, who, role, start, end):
-    api.shift({"employee": who, "role": role, "start": f"{DAY}T{start}", "end": f"{DAY}T{end}"})
-
-
-def example():
-    api = build_app()
-    shift(api, "alice", "SERVER", "17:00", "23:00")
-    shift(api, "bob", "BARTENDER", "18:00", "23:00")
-    shift(api, "cara", "BUSSER", "18:00", "22:00")
-    shift(api, "dan", "MANAGER", "16:00", "23:59")
-    shift(api, "eve", "HOST", "17:00", "18:30")
-    api.declare({"day": DAY, "service": "DINNER", "card": "1000", "cash": "200"})
-    return api.distribute(DAY, "DINNER")[1]
+DAY = date(2026, 3, 4)
 
 
 class HiddenTips(unittest.TestCase):
-    def test_B1_cash_not_charged(self):
-        self.assertEqual(example()["alice"], "585.00")
+    def test_B1_managers_excluded(self):
+        p = TipPool()
+        p.add_work("ana", "SERVER", DAY, "DINNER", 5)
+        p.add_work("mo", "MANAGER", DAY, "DINNER", 5)
+        p.add_tips(DAY, "DINNER", card=100)
+        self.assertEqual(p.distribute(DAY, "DINNER"), {"ana": Decimal("97.50")})
 
-    def test_B2_managers_excluded(self):
-        self.assertNotIn("dan", example())
+    def test_B2_no_fee_on_cash(self):
+        p = TipPool()
+        self.assertEqual((p.add_tips(DAY, "DINNER", cash=100, card=100), p.pool(DAY, "DINNER"))[1], Decimal("197.50"))
 
-    def test_B3_exactly_two_hours_eligible(self):
-        api = build_app()
-        shift(api, "a", "SERVER", "17:00", "22:00")
-        shift(api, "c", "BUSSER", "18:00", "20:00")
-        api.declare({"day": DAY, "service": "DINNER", "card": "0", "cash": "100"})
-        self.assertIn("c", api.distribute(DAY, "DINNER")[1])
+    def test_B3_exactly_one_hour_is_eligible(self):
+        p = TipPool()
+        p.add_work("ana", "SERVER", DAY, "DINNER", 5)
+        p.add_work("ben", "SERVER", DAY, "DINNER", 1)
+        p.add_tips(DAY, "DINNER", card=Decimal("61.54"))
+        self.assertEqual(p.distribute(DAY, "DINNER"), {"ana": Decimal("50.00"), "ben": Decimal("10.00")})
 
-    def test_B4_roles_add_up(self):
-        api = build_app()
-        shift(api, "fay", "BUSSER", "16:00", "19:00")
-        shift(api, "fay", "SERVER", "19:00", "22:00")
-        shift(api, "gus", "SERVER", "17:00", "20:00")
-        api.declare({"day": DAY, "service": "DINNER", "card": "0", "cash": "100"})
-        self.assertEqual(api.distribute(DAY, "DINNER")[1], {"fay": "60.00", "gus": "40.00"})
+    def test_B4_leftover_cents_to_most_points(self):
+        p = TipPool()
+        p.add_work("zoe", "SERVER", DAY, "DINNER", 2)
+        p.add_work("ben", "SERVER", DAY, "DINNER", 1)
+        p.add_tips(DAY, "DINNER", cash=10)
+        self.assertEqual(p.distribute(DAY, "DINNER"), {"zoe": Decimal("6.67"), "ben": Decimal("3.33")})
 
-    def test_B5_hours_split_by_service(self):
-        api = build_app()
-        shift(api, "ann", "SERVER", "14:00", "22:00")
-        shift(api, "ben", "SERVER", "16:00", "22:00")
-        api.declare({"day": DAY, "service": "DINNER", "card": "0", "cash": "100"})
-        self.assertEqual(api.distribute(DAY, "DINNER")[1], {"ann": "50.00", "ben": "50.00"})
+    def test_B5_lunch_and_dinner_are_separate_pools(self):
+        p = TipPool()
+        p.add_work("ana", "SERVER", DAY, "LUNCH", 4)
+        p.add_work("ben", "SERVER", DAY, "DINNER", 4)
+        p.add_tips(DAY, "LUNCH", card=100)
+        self.assertEqual(p.distribute(DAY, "LUNCH"), {"ana": Decimal("97.50")})

@@ -1,33 +1,28 @@
-# Weekly Payroll Run
+# Payroll Overtime
 
-A staffing agency pays hourly workers weekly (Monday 00:00 to Sunday 23:59). Workers clock in and out on a phone app; the payroll run turns
-a week of shifts into a pay stub. The repository contains the timesheet and payroll service.
+A warehouse pays hourly staff weekly. Shifts are clocked in and out; the payroll run works out regular, overtime and double-time hours
+and the gross pay. `payroll.py` does the calculation.
 
 ## Hours
 
-- A shift's hours are counted **to the minute**. A shift that crosses midnight belongs entirely to the **day it started**.
-- **Meal break:** a shift **longer than 6 hours** has **30 unpaid minutes** deducted automatically, unless the worker recorded a break for that shift.
-- Several shifts on the same day add up.
+- A shift belongs to the **day it starts on** (night shifts that cross midnight count for the start day).
+- Shifts **longer than 6 hours** include a **30-minute unpaid meal break**, which is deducted.
+- Shifts of one employee can't overlap.
 
-## Rate
+## Daily overtime
 
-Each worker has an hourly rate that can change; each change has an **effective date**. A shift is paid at the rate **effective on the day
-the shift started**.
+Per day: the first **8 hours** are regular; hours **8–12** are overtime (1.5×); hours **beyond 12** are double time (2×).
 
-## Overtime
+## Weekly overtime
 
-- **Daily:** for each day, the first **8** hours are regular, hours **8–12** are paid **1.5×**, hours **over 12** are paid **2×**.
-- **Weekly:** **regular** hours (not already daily overtime) beyond **40** in the week are paid **1.5×**. The excess is taken from the
-  **latest** days of the week first, at those days' rates. An hour is never paid overtime twice.
+The week runs **Monday to Sunday**. Once an employee has **40 regular hours** in the week, further **regular** hours that week become
+overtime (1.5×), going through the days in order. Daily overtime and double-time hours don't count toward the 40.
 
-## Pay stub
+## Rates
 
-Gross = Σ hours × rate × multiplier, rounded half-up to the cent. Withholding is a flat **10%** of gross (rounded half-up); net = gross − withholding.
+Each hour is paid at the hourly rate **in effect on the day of the shift**. Rates change with an effective date. Gross pay is rounded to the cent.
 
-## Examples (rate $20/h, all shifts with a recorded break)
+## Example
 
-| Week | Gross |
-|---|---|
-| Mon–Fri, 10 h each | 40 × 20 + 10 × 30 = **$1,100.00** |
-| Mon–Sat, 8 h each | 40 × 20 + 8 × 30 = **$1,040.00** |
-| One 14 h day | 8 × 20 + 4 × 30 + 2 × 40 = **$360.00** |
+$20/h. Monday–Friday 09:00–17:30 (8.5 h − 0.5 h break = 8 h each) and Saturday 09:00–14:00 (5 h).
+40 regular hours, then Saturday's 5 hours are weekly overtime: 40 × 20 + 5 × 30 = **$950.00**.

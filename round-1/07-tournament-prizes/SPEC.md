@@ -1,45 +1,32 @@
-# Card Room Tournament Manager
+# Tournament Prizes
 
-A card room runs weekly freeze-out tournaments with re-entry. The tournament director's software registers players, records
-eliminations hand by hand, and pays prizes and bounties at the end. The repository contains that software.
+A card room runs poker tournaments. Players register, may **re-enter** after busting during late registration, and are eliminated one
+by one until a winner remains. `tournament.py` tracks entries, finishing positions and prize money.
 
-## Registration and re-entry
+## Entries
 
-- Buy-in is **$55** per entry: **$45** goes to the prize pool side, **$10** is the entry's **bounty**.
-- Players register before the start or during **late registration**, which stays open **through the end of level 6** (blind levels
-  are numbered from 1; the director advances levels manually).
-- A busted player may **re-enter** (buy a new entry) during late registration. A player can have **at most 2 re-entries** (3 entries
-  in total) and only one live entry at a time.
+- Buy-in $100: **$85 goes to the prize pool**, $15 to the house. Every entry counts, **including re-entries**.
+- **Late registration** is open until the tournament director closes it. While it's open, a busted player may re-enter, at most
+  **2 re-entries** per player (3 entries in total). After it closes, nobody can register or re-enter.
+- Some tournaments have a **guarantee**: the pool is never less than the guaranteed amount (the house adds the difference).
 
-## Prize pool
+## Eliminations and finishing positions
 
-- **Rake:** the house keeps **10% of the prize-pool side** of all entries (rounded down to the cent).
-- **Guarantee:** the prize pool is at least **$2,000**. If the prize-pool side minus rake is less, the house adds the difference.
-- Places paid depend on the number of **entries** (re-entries count):
+- Eliminations while late registration is open don't get a finishing position (the player may re-enter).
+- After it closes, a player knocked out finishes in position = number of players still in before the hand.
+- If several players are knocked out in **the same hand**, the one who **started the hand with more chips finishes higher**.
+- The last player standing finishes 1st.
 
-| Entries | Paid places (% of prize pool) |
+## Prizes
+
+| Entries | Paid places (% of pool) |
 |---|---|
-| up to 10 | 65 / 35 |
-| 11 – 30 | 50 / 30 / 20 |
-| 31 or more | 40 / 25 / 15 / 12 / 8 |
+| 2–9 | 65, 35 |
+| 10–29 | 50, 30, 20 |
+| 30 or more | 40, 25, 15, 10, 10 |
 
-- Each place amount is rounded down to the cent; leftover cents go to **1st place**.
+Each prize is rounded **down to the dollar**; the dollars left over go to **1st place**.
 
-## Eliminations and finishing places
+## Example
 
-- Eliminations are recorded per hand: the hand number, the eliminated player(s), and the player who won the pot.
-- A player's finishing place is decided by their **final** elimination (one with no re-entry after it).
-- Players eliminated **in the same hand** tie: they share the places they occupy equally, and the next place skips accordingly.
-  Leftover cents from a tie split go one each to tied players in alphabetical order.
-- The last player standing is 1st.
-
-## Bounties
-
-Every time an entry is eliminated, its **$10 bounty** goes to the player who won that pot (split equally, rounded down, if several
-players shared the pot; leftover cents to the first in alphabetical order).
-
-## Examples
-
-- 61 entries → prize side 61 × $45 = $2,745.00; rake $274.50; net $2,470.50 → pool **$2,470.50** (above the guarantee).
-- 20 entries → net $810.00 → the guarantee applies: pool **$2,000.00**, paid 50 / 30 / 20.
-- 20 entries: ana wins; ben and cy bust in the same hand as 2nd/3rd → each gets (600 + 400) / 2 = **$500**; dee (4th) gets nothing.
+8 players, guarantee $1,000. Pool = 8 × 85 = $680 → guarantee → **$1,000**. Prizes: 1st **$650**, 2nd **$350**.

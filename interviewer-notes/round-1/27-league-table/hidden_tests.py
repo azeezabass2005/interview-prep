@@ -1,40 +1,44 @@
 import unittest
+from datetime import date
 
-from league.app import build_app
+from standings import League
 
-
-def league(*results, teams=None):
-    api = build_app()
-    names = teams or sorted({t for r in results for t in r[:2]})
-    api.teams(*names)
-    for i, (home, away, hg, ag) in enumerate(results):
-        api.schedule(f"f{i}", home, away, f"2026-03-{i + 1:02d}")
-        api.result(f"f{i}", hg, ag)
-    return api
+D1, D2, D3 = date(2026, 3, 1), date(2026, 3, 8), date(2026, 3, 15)
 
 
-def order(api):
-    return [r["team"] for r in api.table()[1]["table"]]
+def row(league, team):
+    return next(r for r in league.table() if r.team == team)
 
 
-class HiddenLeague(unittest.TestCase):
-    def test_B1_away_conceded(self):
-        row = {r["team"]: r for r in league(("A", "B", 2, 1)).table()[1]["table"]}["B"]
-        self.assertEqual(row["gd"], -1)
+class HiddenStandings(unittest.TestCase):
+    def test_B1_away_goals_against(self):
+        league = League(["A", "B"])
+        league.record("m1", D1, "A", "B", 2, 1)
+        self.assertEqual(row(league, "B").goal_difference, -1)
 
-    def test_B2_goal_difference_first(self):
-        self.assertEqual(order(league(("X", "Z", 6, 1), ("Y", "W", 9, 6)))[:2], ["X", "Y"])
+    def test_B2_goal_difference_before_goals_scored(self):
+        league = League(["X", "Y", "P", "Q"])
+        league.record("m1", D1, "X", "P", 3, 0)
+        league.record("m2", D1, "Y", "Q", 4, 2)
+        self.assertEqual([r.team for r in league.table()][:2], ["X", "Y"])
 
-    def test_B3_head_to_head_among_tied(self):
-        api = league(("Zeta", "Alpha", 1, 0), ("Cobras", "Zeta", 1, 0), ("Alpha", "Dynamo", 1, 0))
-        self.assertEqual(order(api), ["Cobras", "Zeta", "Alpha", "Dynamo"])
+    def test_B3_correction_replaces_result(self):
+        league = League(["A", "B"])
+        league.record("m1", D1, "A", "B", 1, 0)
+        league.record("m1", D1, "A", "B", 0, 1)
+        self.assertEqual((row(league, "A").points, row(league, "B").points), (0, 3))
 
-    def test_B4_shared_positions(self):
-        api = league(("A", "C", 1, 0), ("B", "D", 1, 0))
-        self.assertEqual([r["pos"] for r in api.table()[1]["table"]], [1, 1, 3, 3])
+    def test_B4_deductions_affect_order(self):
+        league = League(["A", "B", "C"])
+        league.record("m1", D1, "A", "C", 1, 0)
+        league.record("m2", D2, "A", "C", 1, 0)
+        league.record("m3", D3, "B", "C", 1, 0)
+        league.deduct("A", 4)
+        self.assertEqual([r.team for r in league.table()][:2], ["B", "A"])
 
-    def test_B5_correction_replaces_result(self):
-        api = league(("A", "B", 2, 0))
-        api.result("f0", 0, 2)
-        rows = {r["team"]: r for r in api.table()[1]["table"]}
-        self.assertEqual((rows["B"]["pts"], rows["A"]["pts"], rows["A"]["played"]), (3, 0, 1))
+    def test_B5_form_most_recent_first(self):
+        league = League(["A", "B"])
+        league.record("m1", D1, "A", "B", 1, 0)
+        league.record("m2", D2, "A", "B", 0, 1)
+        league.record("m3", D3, "A", "B", 2, 2)
+        self.assertEqual(league.form("A"), "DLW")

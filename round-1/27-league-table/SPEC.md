@@ -1,37 +1,24 @@
-# League Standings
+# League Table
 
-A federation publishes standings for an amateur football league. Fixtures are scheduled before the season; referees enter results after
-each match (and occasionally **correct** a result entered by mistake). The repository contains the standings service.
+A football league publishes its table after every match day. `standings.py` records results and computes the table and each team's form.
 
 ## Results
 
-- A result belongs to a scheduled fixture. Entering a result for a fixture that already has one **replaces** it.
-- Postponed fixtures (no result) don't count.
-- **Points:** win 3, draw 1, loss 0. **Deductions** (penalties) are subtracted from a team's points.
+- A result has a match id, date, home team, away team and the goals of each.
+- A result can be **corrected** later: recording the same match id again **replaces** the earlier result.
+- The league can **deduct points** from a team (e.g. for financial breaches).
 
-## Ordering
+## Table
 
-1. points (high to low)
-2. goal difference (scored − conceded)
-3. goals scored
-4. **head-to-head points** counting **only matches between the teams still tied**
-5. team name, alphabetically (display only)
+- Win 3 points, draw 1, loss 0. Points deductions are subtracted from the total.
+- Each row: played, won, drawn, lost, goals for, goals against, goal difference, points.
+- **Order:** points, then **goal difference**, then **goals scored**, then team name alphabetically.
 
-Teams still level after step 4 **share a position**; the next team's position skips (1, 2, 2, 4).
+## Form
 
-## Form guide
-
-The last 5 results per team, oldest first, as W/D/L, by fixture date.
+A team's form is its last **5** results as letters (W/D/L), **most recent first**.
 
 ## Example
 
-Results: Zeta 1–0 Alpha · Cobras 1–0 Zeta · Alpha 1–0 Dynamo.
-
-| Pos | Team | Pts | GD | GF |
-|---|---|---|---|---|
-| 1 | Cobras | 3 | +1 | 1 |
-| 2 | Zeta | 3 | 0 | 1 |
-| 3 | Alpha | 3 | 0 | 1 |
-| 4 | Dynamo | 0 | −1 | 0 |
-
-Zeta ranks above Alpha on head-to-head.
+1 Mar Ajax 2–0 Bulls · 8 Mar Bulls 1–1 Cobras · 15 Mar Cobras 0–3 Ajax.
+Table: **Ajax** 6 pts (GD +5), **Bulls** 1 pt (GD −2), **Cobras** 1 pt (GD −3). Ajax's form: **WW**.

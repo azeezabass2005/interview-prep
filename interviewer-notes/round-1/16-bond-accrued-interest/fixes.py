@@ -1,11 +1,8 @@
 FIXES = [
-    ("bonds/daycount.py", "    if d2 == 31:\n", "    if d2 == 31 and d1 == 30:\n"),
-    ("bonds/daycount.py", "Decimal((end - start).days) / 365", "Decimal((end - start).days) / 360"),
-    ("bonds/calendar.py", "        return d.weekday() < 5\n", "        return d.weekday() < 5 and d not in self.holidays\n"),
-    ("bonds/schedule.py", "from .calendar import shift_months", "from datetime import date as _date\n\nfrom .calendar import is_month_end, last_day, shift_months"),
-    ("bonds/schedule.py", "        dates.append(shift_months(bond.maturity, -step * n))",
-     "        d = shift_months(bond.maturity, -step * n)\n"
-     "        if is_month_end(bond.maturity):\n            d = _date(d.year, d.month, last_day(d.year, d.month))\n"
-     "        dates.append(d)"),
-    ("bonds/schedule.py", "previous = max(d for d in dates if d < settle)", "previous = max(d for d in dates if d <= settle)"),
+    ("bonds.py", "        return d.weekday() < 5", "        return d.weekday() < 5 and d not in self.holidays"),
+    ("bonds.py", "    d1, d2 = start.day, end.day\n", "    d1, d2 = start.day, end.day\n    if d1 == 31:\n        d1 = 30\n"),
+    ("bonds.py", "        basis = 360 if self.convention == \"30/360\" else 365", "        basis = 360"),
+    ("bonds.py", "if d < settle)", "if d <= settle)"),
+    ("bonds.py", "        dates, current = [], self.maturity\n        while current > start:\n            dates.append(current)\n            current = add_months(current, -step)\n        dates.append(current)",
+     "        dates, k = [], 0\n        while True:\n            current = add_months(self.maturity, -step * k)\n            dates.append(current)\n            if current <= start:\n                break\n            k += 1"),
 ]

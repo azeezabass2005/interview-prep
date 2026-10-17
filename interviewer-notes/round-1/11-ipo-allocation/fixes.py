@@ -1,11 +1,13 @@
 FIXES = [
-    ("ipo/services/closing.py", "        live = [o for o in offering.orders.values() if o.status == ACTIVE]",
-     "        live = [o for o in offering.orders.values() if o.status == ACTIVE and o.limit >= price]"),
-    ("ipo/services/closing.py", "        institutional_tranche = offering.shares - retail_tranche\n",
+    ("ipo.py", "(o.limit is None or o.limit > price)]", "(o.limit is None or o.limit >= price) and not o.cancelled]"),
+    ("ipo.py", "                raise IpoError(\"bad size\")\n", "                raise IpoError(\"bad size\")\n            if shares > order.shares:\n                order.priority = self._tick()\n"),
+    ("ipo.py", "        result = self._pro_rata(retail, retail_avail, 1)\n        result.update(self._pro_rata(institutional, inst_avail, 1))",
      "        retail_demand = sum(o.shares for o in retail)\n"
-     "        institutional_tranche = offering.shares - retail_tranche + max(0, retail_tranche - retail_demand)\n"),
-    ("ipo/services/allocation.py", "    return int(round(shares / LOT_SIZE)) * LOT_SIZE", "    return int(shares // LOT_SIZE) * LOT_SIZE"),
-    ("ipo/services/allocation.py", "key=lambda o: (o.shares - alloc[o.investor], o.seq))", "key=lambda o: (o.shares - alloc[o.investor], -o.seq))"),
-    ("ipo/services/book.py", "        order.shares, order.limit = new_shares, new_limit\n",
-     "        order.shares, order.limit = new_shares, new_limit\n        order.seq = self._store.next_seq()\n"),
+     "        inst_demand = sum(o.shares for o in institutional)\n"
+     "        if retail_demand < retail_avail:\n"
+     "            inst_avail += retail_avail - retail_demand\n"
+     "        elif inst_demand < inst_avail:\n"
+     "            retail_avail += inst_avail - inst_demand\n"
+     "        result = self._pro_rata(retail, retail_avail, RETAIL_LOT)\n"
+     "        result.update(self._pro_rata(institutional, inst_avail, 1))"),
 ]

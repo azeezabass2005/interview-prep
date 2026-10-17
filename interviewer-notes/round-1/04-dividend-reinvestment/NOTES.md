@@ -1,83 +1,61 @@
-# R1-04 · Dividend Reinvestment (DRIP): Interviewer Guide
+# R1-04 · Dividend Reinvestment: Interviewer Guide
 
-~320 lines in `drip/`. One passing test (US cash holder). Two of the bugs are **"as of which date?"** bugs (point-in-time state), a very
-common class in financial systems. The others are a default value, a missing carry-over and a wrong base for a cap.
+One file, `drip.py` (~85 lines), with one passing test (a cash dividend). The spec example passes on the buggy code (exact share count, US client).
 
 ## Session plan (60 min)
-0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
+0–5 resume · 5–12 spec summary + questions · 12–17 code walk · 17–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
 | Question | Answer |
 |---|---|
-| Record date inclusive? | Yes, movements dated on the record date count. |
-| Enrolment change effective on the record date itself? | Counts (effective from that day). |
-| Country codes case? | Case-insensitive ISO codes. Unknown → 30%. |
-| Order of steps | gross → withholding (on gross) → fee (capped at 5% of **net**) → add leftover → buy. |
-| Leftover scope | Per account **and** security. |
-| Negative holdings | Not possible in practice; skip ≤ 0 (as coded). |
-| Same pay date for two events of one security | Out of scope. |
-| Reinvested shares count for the next event? | Yes, from their pay date onward. |
+| Bought between record and pay date | Those shares don't get this dividend. |
+| Enrol on the record date itself | Applies. |
+| Unknown country code | 30%. |
+| Fractional share rounding | Always down to 0.0001. |
+| Leftover cash | Paid out, rounded down to the cent. |
 
 ## Code map
-| Module | Responsibility |
-|---|---|
-| `register.py` | Point-in-time holdings from movements |
-| `services/enrolment.py` | Enrolment history (`enrolled_on` is correct and **unused**: a clue) |
-| `services/withholding.py` | Rates by residence |
-| `services/processor.py` | Entitlement, cash/reinvest decision, reinvestment maths |
-| `services/reports.py` | Tax report and event totals (correct) |
-| `store.py`, `api.py`, `app.py` | Storage, facade, wiring |
+`trade` · `shares_on` (point in time) · `enrol` / `enrolled_on` · `_tax_rate` · `pay_dividend`.
 
 ## Planted bugs (5)
 
-### B1 · Entitlement measured on the pay date
-- **Where:** `processor.py::process`: `holdings(event.security, event.pay_date)`.
-- **Test:** 100 shares before the record date + 50 bought between record and pay date → paid on 100 (gross $82.00, buggy $123.00).
-- **Fix:** `event.record_date`.
-- **Hints:** (1) "Trade between the record date and the pay date." (2) "Which date is passed to `holdings`?"
+### B1 · Eligibility uses the pay date
+- **Where:** `pay_dividend`: `shares_on(..., pay_date)`.
+- **Test:** buy 50 more between record and pay → gross on 100 shares = **$50.00** (buggy $75.00).
 
-### B2 · Unknown countries withheld at 0%
-- **Where:** `withholding.py::withholding_rate`: `.get(country, Decimal("0"))`. `DEFAULT_WITHHOLDING_RATE` exists and is unused.
-- **Test:** a Brazilian resident (BR), 100 shares → withholding $24.60.
-- **Fix:** default to `DEFAULT_WITHHOLDING_RATE`.
-- **Hints:** "Test a country that isn't in the table."
+### B2 · Unknown countries withhold 0%
+- **Where:** `_tax_rate`: default `0`; `DEFAULT_WITHHOLDING` is unused (clue).
+- **Test:** BR client → tax **$15.00** on $50.
 
-### B3 · Enrolment read "now", not on the record date
-- **Where:** `processor.py::process`: `currently_enrolled(...)`. `enrolled_on(account, security, date)` already exists.
-- **Test:** enrol with effective date after the record date → this event pays cash. And un-enrolling after the record date still reinvests.
-- **Fix:** `self._enrolment.enrolled_on(account_id, event.security, event.record_date)`.
-- **Hints:** "Change enrolment between record date and processing."
+### B3 · Reinvested shares round half-up
+- **Where:** `pay_dividend`: `ROUND_HALF_UP` on shares bought.
+- **Test:** net $20 at $3 → **6.6666** (buggy 6.6667, which costs more than net).
 
-### B4 · Leftover cash never reused
-- **Where:** `processor.py::_reinvest`: the leftover is stored but never added to the investable cash.
-- **Test:** US, enrolled, 10 shares, two quarterly events at $0.82 / $40: Q2 buys **0.1983** shares and leaves 0 (buggy 0.1982).
-- **Fix:** `investable = net - fee + self._store.leftover(account_id, security)`.
-- **Hints:** "Run two events in a row for a small holder." "Where is `leftover` read?"
+### B4 · Leftover cash is dropped
+- **Where:** `pay_dividend`: `cash = 0` when enrolled.
+- **Test:** net $50 at $700 → 0.0714 shares, **$0.02** cash.
 
-### B5 · Fee cap uses gross instead of net
-- **Where:** `processor.py::_reinvest`: `gross * FEE_CAP_RATE`.
-- **Test:** GB resident (15%), enrolled, 10 shares: gross 8.20, tax 1.23, net 6.97 → fee **0.35** (buggy 0.41).
-- **Fix:** `net * FEE_CAP_RATE`.
-- **Hints:** "Combine withholding and a small reinvestment."
+### B5 · Enrolment isn't point-in-time
+- **Where:** `enrolled_on`: returns the latest state, ignoring `on` (clue: unused parameter).
+- **Test:** enrol after the record date → paid in cash.
+
+Hints: (1) "which date does each step use?"; (2) "which parameters are unused?"
 
 ## Red herrings
-- `ROUND_DOWN` on gross and on shares, and `ROUND_HALF_UP` on tax and fee, are all by spec.
-- Skipping accounts with zero shares is correct.
+- Gross rounds down, tax rounds to nearest: both as specified.
+- Reinvested shares are added on the pay date: correct.
 
 ## Questions about the candidate's fixes (data structures)
-- **B1:** "`holdings()` scans every movement of the security on each call: O(M). For 1M shareholders and many events, how would you make 'holding on date D' fast?" (Per (account, security) a list of movements sorted by date with running totals → `bisect` = O(log m). Or nightly snapshots + deltas. Trade-off: memory vs query time.)
-- **B3:** "Enrolment history is a sorted list scanned linearly. Better?" (`bisect_right` on effective dates → O(log k). Note `add_enrolment` re-sorts on every insert: O(k log k); `insort` makes it O(k).) "What happens with two changes effective the same day?" (Ambiguous: last write wins; ask PM.)
-- **B4:** "Leftovers live in a dict keyed by (account, security). Why a tuple key rather than nested dicts?" (Simpler, O(1); nested dicts help when you need all securities of an account.) "What happens to the leftover if the process crashes after buying shares but before saving it?" (Lost or doubled: persist both atomically.)
-- **General:** "Why Decimal? Show me a float that breaks this." (0.1 + 0.2; and fractional shares to 4 dp.)
+- **`shares_on`** scans every trade: O(T) per account, O(A·T) per dividend. "Better?" (Per (account, symbol) list of trades sorted by date + prefix sums; `bisect` the record date: O(log T).)
+- **B5:** "Enrolment history is a list. How do you find the state on a date?" (Sorted by date, `bisect_right` → O(log n). What if two changes on the same day? Last one wins: need a sequence number.)
+- **Trades as tuples in one list.** "What would you change if this held 10M trades?" (Index by key; append-only ledger is fine for audit.)
+- **Decimal precision:** "Why not store shares as float?" (0.0001 units; exact sums.)
 
 ## Feature requests
-1. **"Partial DRIP: shareholders can reinvest a percentage (e.g. 60%) and take the rest as cash."**
-   Strong answer: the enrolment model gains a percentage (history keeps working); the split happens after withholding; how rounding is shared (cash rounded down, rest reinvested); the fee applies only to the reinvested part.
-2. **"Scrip dividend: the company issues new shares at a 3% discount to the market price instead of buying in the market."**
-   Strong answer: the reinvestment price comes from the event; the discount is a policy on the event; reporting of newly issued shares vs market purchases.
-3. **"Re-process an event after a late-reported trade (before the record date)."**
-   Strong answer: processing must be idempotent; compute the delta payment; reverse/re-issue DRIP movements; audit trail; never edit history in place.
+1. **"Partial DRIP: reinvest only X% of the dividend."** Strong answer: enrolment stores a percentage; same rounding rules; point-in-time.
+2. **"Special dividends are never reinvested."** Strong answer: dividend type flag; one branch; test.
+3. **"Treaty rates by (country, security type)."** Strong answer: a lookup keyed by tuple with fallbacks; effective dates for rate changes.
 
 ## Scoring signals
-- **Strong:** asks "as of when?" for every input (holdings, enrolment, leftover), notices `enrolled_on` and `DEFAULT_WITHHOLDING_RATE` are unused, builds a two-event test.
-- **Weak:** tests only the single-event happy path; "fixes" the rounding modes (red herring).
+- **Strong:** builds a timeline test (trade between record and pay); spots unused `on` and `DEFAULT_WITHHOLDING`.
+- **Weak:** only single-date scenarios.

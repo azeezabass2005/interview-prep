@@ -1,34 +1,47 @@
 import unittest
+from datetime import date, datetime, timedelta
+from decimal import Decimal
 
-from payroll.app import build_app
+from payroll import Payroll
+
+MON = date(2026, 3, 2)
 
 
-def gross(*shifts, rate_changes=()):
-    api = build_app()
-    api.hire("w", "Wes", "20", "2026-01-01")
-    for rate, effective in rate_changes:
-        api.change_rate("w", rate, effective)
-    for start, end, break_taken in shifts:
-        api.clock("w", {"start": start, "end": end, "break_taken": break_taken})
-    return api.stub("w", "2026-03-02")[1]["gross"]
+def at(day_offset, hour, minute=0):
+    return datetime(2026, 3, 2, hour, minute) + timedelta(days=day_offset)
+
+
+def staff():
+    p = Payroll()
+    p.set_rate("ana", date(2026, 1, 1), 20)
+    return p
 
 
 class HiddenPayroll(unittest.TestCase):
-    def test_B1_double_time_not_also_overtime(self):
-        self.assertEqual(gross(("2026-03-02T06:00", "2026-03-02T20:00", True)), "360.00")
+    def test_B1_six_hours_has_no_break(self):
+        p = staff()
+        p.add_shift("ana", at(0, 9), at(0, 15))
+        self.assertEqual(p.week("ana", MON)["gross"], Decimal("120.00"))
 
-    def test_B2_weekly_overtime_on_regular_hours(self):
-        days = [(f"2026-03-0{d}T08:00", f"2026-03-0{d}T18:00", True) for d in range(2, 7)]
-        self.assertEqual(gross(*days), "1100.00")
+    def test_B2_double_time_after_12_hours(self):
+        p = staff()
+        p.add_shift("ana", at(0, 6), at(0, 20))
+        self.assertEqual(p.week("ana", MON)["gross"], Decimal("340.00"))
 
-    def test_B3_overnight_shift_on_start_day(self):
-        self.assertEqual(gross(("2026-03-02T20:00", "2026-03-03T06:00", True),
-                               ("2026-03-03T08:00", "2026-03-03T16:00", True)), "380.00")
+    def test_B3_daily_overtime_not_counted_toward_40(self):
+        p = staff()
+        for d in range(5):
+            p.add_shift("ana", at(d, 7), at(d, 17, 30))
+        self.assertEqual(p.week("ana", MON)["gross"], Decimal("1100.00"))
 
-    def test_B4_exactly_six_hours_no_deduction(self):
-        self.assertEqual(gross(("2026-03-02T09:00", "2026-03-02T15:00", False)), "120.00")
+    def test_B4_rate_in_effect_on_the_day(self):
+        p = staff()
+        p.set_rate("ana", date(2026, 3, 9), 25)
+        p.add_shift("ana", at(0, 9), at(0, 17, 30))
+        self.assertEqual(p.week("ana", MON)["gross"], Decimal("160.00"))
 
-    def test_B5_rate_in_effect_on_shift_day(self):
-        self.assertEqual(gross(("2026-03-02T09:00", "2026-03-02T17:00", True),
-                               ("2026-03-04T09:00", "2026-03-04T17:00", True),
-                               rate_changes=[("25", "2026-03-04")]), "360.00")
+    def test_B5_night_shift_belongs_to_start_day(self):
+        p = staff()
+        p.add_shift("ana", at(0, 20), at(1, 2))
+        p.add_shift("ana", at(1, 8), at(1, 16, 30))
+        self.assertEqual(p.week("ana", MON)["gross"], Decimal("280.00"))

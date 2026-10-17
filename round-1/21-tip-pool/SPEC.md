@@ -1,43 +1,30 @@
-# Restaurant Tip Pools
+# Tip Pool
 
-A restaurant pools tips separately for **lunch** and **dinner** each day and shares each pool among the staff who worked that service.
-Staff see a weekly tip statement. The repository contains the tip service.
+A restaurant pools the tips of each service (LUNCH and DINNER are separate pools every day) and shares them among the staff who
+worked that service. `tips.py` records hours and tips and distributes each pool.
 
-## Services and hours
+## The pool
 
-- **Lunch** runs 10:00–16:00 and **dinner** 16:00–24:00 on the same calendar day.
-- A shift counts toward each service **only for the hours it overlaps** that service window (a 14:00–22:00 shift is 2 lunch hours and 6 dinner hours).
-- Hours are counted to the minute.
+- Cash tips go in as they are. **Card tips** have a **2.5% processing fee** deducted first (fee rounded to the cent). Cash tips have no fee.
 
-## Pools
+## Who shares
 
-- For each day and service, the manager declares **card tips** and **cash tips**.
-- Pool = card tips **minus 3%** (card processing) **plus** cash tips, rounded half-up to the cent. Cash isn't charged the 3%.
-
-## Eligibility and weights
-
-- **Managers are never eligible** (and their hours don't count for anything).
-- Anyone with **fewer than 2 hours** in that service is not eligible for that pool. The minimum applies to the employee's total hours across roles in that service.
-- Weight = role points × hours in that service, **summed over all roles** worked in that service:
-
-| Role | Points |
-|---|---|
-| SERVER | 10 |
-| BARTENDER | 8 |
-| BUSSER | 5 |
-| HOST | 3 |
-| KITCHEN | 2 |
+- Eligible roles and weights: SERVER 1.0, BARTENDER 1.0, BUSSER 0.5, HOST 0.5. **Managers never share** in the pool.
+- An employee must have worked **at least 1 hour** in that service.
 
 ## Shares
 
-Each eligible employee gets pool × weight / total weight, rounded down to the cent. Leftover cents go one each to the employees with the
-**largest fractional remainders** (ties: alphabetical), so shares add up to the pool exactly.
+- Points = hours × weight. Share = pool × points ÷ total points, **rounded down** to the cent.
+- Leftover cents go one each to the employees with the **most points** first (ties alphabetical by name).
+- An employee's **weekly statement** is the sum of their shares for services Monday–Sunday.
 
-## Weekly statement
+## Other operations
 
-Sum of an employee's shares from every pool in a Monday–Sunday week.
+- Hours can be corrected (`remove_work`) only until that pool has been distributed.
+- `undistributed(until)` lists (day, service) pools with tips that haven't been distributed yet, up to a date.
+- `day_report(day)` shows each service's pool, whether it's distributed, and the shares.
 
 ## Example
 
-Dinner: card $1,000.00, cash $200.00 → pool **$1,170.00**. Alice SERVER 6 h (60), Bob BARTENDER 5 h (40), Cara BUSSER 4 h (20),
-Dan MANAGER 8 h (excluded), Eve HOST 1.5 h (excluded) → **Alice $585.00 · Bob $390.00 · Cara $195.00**.
+Dinner, $400 card tips (fee $10 → pool $390). Ana (server, 6 h), Ben (bartender, 6 h), Cai (busser, 6 h) → points 6, 6, 3 →
+**Ana $156.00, Ben $156.00, Cai $78.00**.

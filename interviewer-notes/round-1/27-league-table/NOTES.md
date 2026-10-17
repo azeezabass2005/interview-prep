@@ -1,68 +1,62 @@
-# R1-27 · League Standings: Interviewer Guide
+# R1-27 · League Table: Interviewer Guide
 
-~200 lines in `league/`. One passing test (a points-only ordering). Bugs: an aggregation copy-paste, two tie-breaker bugs, competition
-ranking, and result corrections double counting.
+One file, `standings.py` (~90 lines), with one passing test (a home win). The spec example's **order and points** pass on the buggy
+code; only its goal differences expose B1.
 
 ## Session plan (60 min)
-0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
+0–5 resume · 5–12 spec summary + questions · 12–17 code walk · 17–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
 | Question | Answer |
 |---|---|
-| H2H among 3+ tied teams | Mini-table of matches between all of them. |
-| H2H still level | Share the position (no further H2H criteria). |
-| Correction | Replaces the previous result for that fixture. |
-| Form with fewer than 5 matches | Show what exists. |
-| Deductions | Points only; can go negative. |
+| Deduction below zero points | Allowed (negative points). |
+| Correction changes the teams | Allowed; the old result is replaced entirely. |
+| Form with fewer than 5 matches | Just the matches played. |
+| Two matches on the same date | Order of recording. |
+| Head-to-head | Not used in this league. |
 
 ## Code map
-| Module | Responsibility |
-|---|---|
-| `services/fixtures.py` | Teams, fixtures, results, deductions |
-| `services/table.py` | Rows, ordering, H2H, positions, form |
-| `store.py`, `api.py`, `app.py` | Storage, facade, wiring |
+`record` · `deduct` · `_rows` (aggregate) · `table` (sort key) · `form`. `Row.points` vs `Row.raw_points`.
 
 ## Planted bugs (5)
 
-### B1 · Away team concedes its own goals
-- **Where:** `table.py::build_rows`: `away.goals_against += r.away_goals`.
-- **Test:** A 2–1 B → B conceded 2, GD −1.
+### B1 · Away team's goals against
+- **Where:** `_rows`: `away.goals_against += r.away_goals` (copy-paste).
+- **Test:** A 2–1 B → B's GD **−1** (buggy 0).
 
 ### B2 · Goals scored before goal difference
-- **Where:** `table.py::standings.level`.
-- **Test:** X beats Z 6–1 (+5, 6 GF); Y beats W 9–6 (+3, 9 GF) → X above Y.
+- **Where:** `table` sort key.
+- **Test:** X won 3–0, Y won 4–2 → **X above Y**.
 
-### B3 · Head-to-head uses overall points
-- **Where:** `table.py::head_to_head`.
-- **Test:** spec example → Cobras, Zeta, Alpha, Dynamo (the alphabetical fallback would put Alpha above Zeta).
+### B3 · Corrections are added, not replaced
+- **Where:** `record` appends.
+- **Test:** m1 1–0 corrected to 0–1 → A 0, B 3.
 
-### B4 · No shared positions
-- **Where:** `table.py::standings`: `enumerate` positions.
-- **Test:** A 1–0 C, B 1–0 D (A and B never meet) → positions 1, 1, 3, 3.
+### B4 · Sorting ignores deductions
+- **Where:** `table` uses `raw_points` (the `points` property exists — clue).
+- **Test:** A 6 − 4 = 2 points, B 3 → **B above A**.
 
-### B5 · Corrections double count
-- **Where:** `fixtures.py::record`: appends a second result for the same fixture.
-- **Test:** f1 entered 2–0, corrected to 0–2 → B 3 pts, A 0 pts, each played 1.
-- **Fix:** store results in a dict keyed by fixture id (or replace in place).
+### B5 · Form oldest first
+- **Where:** `form`.
+- **Test:** W, L, D in date order → **"DLW"**.
 
-Hints: (1) the spec sentence; (2) "construct the smallest league that shows it".
+Hints: (1) "compare `points` and `raw_points` — who uses which?"; (2) "check every column of a row, not just points".
 
 ## Red herrings
-- Deductions applied after aggregation: correct.
-- `groupby` over a list already sorted by the same key: correct.
-- Form ordering by fixture date: correct.
+- Validation of teams and scores: correct.
+- `played` counting: correct.
 
 ## Questions about the candidate's fixes (data structures)
-- **B5:** "Results were a list; you made them a dict keyed by fixture. What do you gain and lose?" (O(1) replace, one result per fixture structurally guaranteed; you lose correction history: keep an audit list if needed.)
-- **B3:** "Your H2H scans all results per tied team: O(T × R). Better?" (Pre-index results by unordered team pair: `dict[frozenset({a, b})] → results`; the mini-table only touches pairs within the group.)
-- **Table:** "The whole table is rebuilt on every request: O(R + T log T). When would you maintain it incrementally, and what makes corrections tricky?" (Corrections need reversal of the old result.)
-- **Form:** "Form sorts all results per team request. Alternative?" (A per-team deque(maxlen=5) updated on entry; corrections complicate it again.)
+- **`_rows` recomputes from every result each call:** O(R). "Incremental?" (Update rows on record; corrections need reversing the old result — or keep recompute, it's simple and correct.)
+- **B3:** "Your fix filters the list: O(R) per record. Better?" (Dict match_id → result: O(1) replace, and naturally unique.)
+- **Sorting with a tuple key:** "Why negate numbers?" (Descending numeric with ascending names in one key.) "Alternative?" (Two stable sorts.)
+- **Form:** "Last 5 per team in O(1)?" (A deque(maxlen=5) per team, appended on record — but corrections and out-of-order dates complicate it.)
 
 ## Feature requests
-1. **"Fair play tie-breaker: fewer yellow/red cards ranks higher, after H2H."** Strong answer: cards on results; a new key in the ordering; the order of criteria stays data-driven.
-2. **"Live table during matchday: provisional results update positions every minute."** Strong answer: provisional vs final results; recompute cost; push updates only on change.
-3. **"Split season: after 22 rounds the league splits into top 6 and bottom 6 groups with separate tables."** Strong answer: positions are frozen at the split; group-specific fixtures; points carry over.
+1. **"Head-to-head as the next tie-breaker."** Strong answer: mini-table among tied teams only; recursive for 3-way ties; tests.
+2. **"Table as of a given date."** Strong answer: filter results by date; corrections still replace; caching per match day.
+3. **"Home and away tables."** Strong answer: same aggregation with a filter; reuse `_rows`.
 
 ## Scoring signals
-- **Strong:** turns the example into a test (finds B3), deliberately builds ties, tests a correction.
-- **Weak:** only distinct-points tables.
+- **Strong:** asserts goal difference, not just order; tests a correction; spots the unused `points` property.
+- **Weak:** only checks positions in simple cases.

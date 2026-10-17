@@ -1,72 +1,61 @@
-# R1-21 · Restaurant Tip Pools: Interviewer Guide
+# R1-21 · Tip Pool: Interviewer Guide
 
-~190 lines in `tips/`. One passing test (two servers, card tips only). The spec example fails on the buggy code (B1, B2). Interval overlap
-(B5) is the most "algorithmic" bug.
+One file, `tips.py` (~90 lines), with one passing test (a single server, card tips). The spec example passes on the buggy code.
 
 ## Session plan (60 min)
-0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
+0–5 resume · 5–12 spec summary + questions · 12–17 code walk · 17–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
 | Question | Answer |
 |---|---|
-| Shift crossing midnight | Counts toward that day's dinner only up to 24:00 (rest ignored). |
-| Exactly 2 hours | Eligible ("fewer than 2" are not). |
-| Manager who also bussed | Busser hours count; manager hours never count. |
-| Re-distributing a pool | Overwrites the previous result for that day/service. |
-| No eligible staff | Empty result; tips held (out of scope). |
-| Employee names | Case-insensitive (lower-cased). |
+| Exactly 1 hour | Eligible. |
+| Someone works lunch and dinner | Shares in both pools separately. |
+| Unknown role (e.g. DISHWASHER) | Not eligible. |
+| Fee rounding | Fee rounded to the cent, then subtracted. |
+| Nobody eligible | Pool undistributed (empty result); out of scope. |
 
 ## Code map
-| Module | Responsibility |
-|---|---|
-| `services/periods.py` | Service windows; hours of a shift in a window |
-| `services/pools.py` | Pool amount; weights and eligibility |
-| `services/distribution.py` | Largest-remainder shares (correct) |
-| `services/tips.py` | Record shifts, declare tips, distribute, weekly statement |
-| `store.py`, `api.py`, `app.py` | Storage, facade, wiring |
+`add_work` · `add_tips` · `pool` · `_points` · `distribute` · `statement`.
 
 ## Planted bugs (5)
 
-### B1 · Card fee charged on cash
-- **Where:** `pools.py::pool_amount`: `(card + cash) × 0.97`.
-- **Test:** spec example → Alice **$585.00** (pool 1,170.00).
-- **Fix:** `card × 0.97 + cash`.
+### B1 · Managers share
+- **Where:** `_points`: `WEIGHTS.get(role, 1.0)`.
+- **Test:** server + manager, $100 card → server gets **$97.50**.
 
-### B2 · Managers in the pool
-- **Where:** `pools.py::weights`: never checks `INELIGIBLE_ROLES` (Dan appears with $0.00, and his hours count toward eligibility).
-- **Test:** spec example → no entry for Dan.
-- **Fix:** skip shifts whose role is ineligible.
+### B2 · Fee on cash tips
+- **Where:** `pool`.
+- **Test:** $100 cash + $100 card → **$197.50** (buggy $195.00).
 
-### B3 · Exactly 2 hours excluded
-- **Where:** `pools.py::weights`: `hours > MIN_HOURS`.
-- **Test:** a busser with exactly 2 dinner hours is paid.
+### B3 · Exactly 1 hour excluded
+- **Where:** `_points`: `> MIN_HOURS`.
+- **Test:** 5 h + 1 h, pool $60 → **50 / 10**.
 
-### B4 · Multi-role weights overwritten
-- **Where:** `pools.py::weights`: `weight[e] = …` instead of `+=`.
-- **Test:** Fay BUSSER 3 h + SERVER 3 h, Gus SERVER 3 h, $100 cash → Fay **60.00**, Gus **40.00**.
+### B4 · Leftover cents alphabetical, not by points
+- **Where:** `distribute`: `sorted(points)`.
+- **Test:** Zoe 2 h, Ben 1 h, $10 → **Zoe 6.67**, Ben 3.33.
 
-### B5 · A shift's hours all go to the service it starts in
-- **Where:** `periods.py::hours_in_service`: if the shift *starts* inside the window, it returns the whole shift length.
-- **Test:** Ann 14:00–22:00, Ben 16:00–22:00, both SERVER, dinner $100 cash → 50.00 / 50.00 (buggy: Ann gets nothing at dinner).
-- **Fix:** overlap = `max(0, min(end, w_end) − max(start, w_start))`.
+### B5 · Services pooled together
+- **Where:** `_points` filters by day only; `service` is a parameter but unused there (clue).
+- **Test:** Ana works lunch only, Ben dinner only → the lunch pool all goes to Ana.
 
-Hints: (1) the spec sentence; (2) "build the smallest roster that shows it".
+Hints: (1) "write a test per sentence in 'Who shares'"; (2) "what does `.get(role, 1.0)` do for a manager?"
 
 ## Red herrings
-- Largest-remainder rounding: correct.
-- Unknown roles raise: correct.
+- `distribute` twice raises: correct.
+- `statement` week window: correct.
 
 ## Questions about the candidate's fixes (data structures)
-- **B5:** "Interval overlap is O(1) per shift-window pair. Distribution scans **all** shifts ever for each pool: O(S). Better?" (Index shifts by day: dict date → shifts; or sort by start and bisect the window.)
-- **B4:** "You switched to `+=` on a dict. Why `defaultdict` vs `dict.get`? Any difference in behaviour for keys that end up ineligible?"
-- **Statements:** "`weekly_statement` scans all payouts. Index alternative?" (Payouts keyed by date already; iterate only the 14 (day, service) keys of the week: O(14).)
-- **Distribution:** "Largest remainder sorts all employees: O(n log n). Could you avoid the full sort?" (`heapq.nlargest(leftover, …)`.)
+- **`_points` scans all work entries:** O(W) per distribution. "Index?" (Dict (day, service) → list of work entries.)
+- **`defaultdict(lambda: {...})` for tips.** "Why a lambda? What's the risk?" (Factory per key; reading creates entries — `pool()` on an unknown service/day silently creates one.)
+- **B4:** "Sorting by (−points, name): O(n log n). If only k leftover cents?" (`heapq.nsmallest(k, ...)`: O(n log k).)
+- **Statements:** "Weekly statement scans all paid pools ever. Better?" (Index paid shares by (employee, week).)
 
 ## Feature requests
-1. **"Tip-outs: servers give 5% of their share to the bartenders before final payouts."** Strong answer: a second redistribution stage with its own rounding; conservation invariant (sum unchanged); ordering vs eligibility.
-2. **"Brunch service on Sundays 10:00–15:00 replacing lunch."** Strong answer: service windows become day-of-week dependent configuration; hours split logic unchanged (that's why the overlap function matters).
-3. **"Payroll export: tips per employee per pay period in cents, with a checksum line."** Strong answer: aggregate across weeks; deterministic ordering; the checksum equals the sum of all pools.
+1. **"Tip-outs: servers give 3% of their food sales to the kitchen first."** Strong answer: a deduction before the pool; kitchen pool separate; sales input needed.
+2. **"Employees can work two roles in one service."** Strong answer: points per (employee, role); summed per employee.
+3. **"Corrections after distribution."** Strong answer: re-run produces adjustments; distributions are immutable records.
 
 ## Scoring signals
-- **Strong:** encodes the example (finds B1/B2 together, then separates them); designs a shift spanning both services.
-- **Weak:** only single-role, single-service rosters.
+- **Strong:** tests each eligibility rule; separates services; checks cents add up.
+- **Weak:** single-employee tests.

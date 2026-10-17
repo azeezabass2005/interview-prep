@@ -1,16 +1,16 @@
 import unittest
+from datetime import date, datetime
+from decimal import Decimal
 
-from payroll.app import build_app
+from payroll import Payroll
 
 
 class TestPayroll(unittest.TestCase):
-    def test_single_regular_day(self):
-        api = build_app()
-        api.hire("w1", "Wes", "20", "2026-01-01")
-        api.clock("w1", {"start": "2026-03-02T09:00", "end": "2026-03-02T17:00", "break_taken": True})
-        status, stub = api.stub("w1", "2026-03-02")
-        self.assertEqual(status, 200)
-        self.assertEqual(stub["gross"], "160.00")
+    def test_short_shift(self):
+        p = Payroll()
+        p.set_rate("ana", date(2026, 1, 1), 20)
+        p.add_shift("ana", datetime(2026, 3, 2, 9), datetime(2026, 3, 2, 13))
+        self.assertEqual(p.week("ana", date(2026, 3, 2))["gross"], Decimal("80.00"))
 
 
 if __name__ == "__main__":

@@ -1,13 +1,16 @@
 import unittest
+from datetime import date
+from decimal import Decimal
 
-from inventory.app import build_app
+from inventory import Inventory
 
 
 class TestInventory(unittest.TestCase):
-    def test_ship_whole_layer(self):
-        api, _ = build_app()
-        api.receive("W", "NJ", 100, "2.00", "2026-01-01")
-        self.assertEqual(api.ship("S1", "W", "NJ", 100), (201, {"cogs": "200.00"}))
+    def test_ship_from_single_lot(self):
+        inv = Inventory()
+        inv.receive("W1", "X", 10, "4.00", date(2026, 3, 1))
+        self.assertEqual(inv.ship("s1", "W1", "X", 4), Decimal("16.00"))
+        self.assertEqual(inv.on_hand("W1", "X"), 6)
 
 
 if __name__ == "__main__":

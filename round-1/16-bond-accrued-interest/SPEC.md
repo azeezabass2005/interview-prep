@@ -1,39 +1,30 @@
-# Bond Trade Booking
+# Bond Accrued Interest
 
-A fixed-income desk books bond trades. For each trade the system works out the **settlement date**, the **accrued interest** and the
-**settlement amount** the buyer pays. Bond reference data (coupon, frequency, maturity, day count) is loaded from a security master.
-The repository contains the booking service.
-
-## Coupon schedule
-
-- Coupon dates step **backward from maturity** every 12 / frequency months (frequency 1, 2 or 4).
-- **End-of-month rule:** if the maturity date is the last day of its month, every coupon date is the last day of its month.
-- If stepping back lands on a day that doesn't exist (e.g. 31 June), use the last day of that month.
+A bond desk books trades in fixed-coupon bonds. The buyer pays the seller the price plus the interest **accrued** since the last coupon.
+`bonds.py` works out settlement dates, coupon dates and accrued interest.
 
 ## Settlement
 
-Trade date + **1 business day**. Business days exclude Saturdays, Sundays and the **market holidays** loaded into the calendar.
+Trades settle **T+2 business days**: skip Saturdays, Sundays and the desk's holidays.
 
-## Day count conventions
+## Coupon schedule
 
-- **30/360 (US):** with dates Y1-M1-D1 and Y2-M2-D2: if D1 is 31, set D1 = 30; if D2 is 31 **and** D1 (after adjustment) is 30, set D2 = 30.
-  Days = 360 × (Y2 − Y1) + 30 × (M2 − M1) + (D2 − D1); year fraction = days / 360.
-- **ACT/360:** actual calendar days / 360.
+A bond pays `rate ÷ frequency` of its face value `frequency` times a year (1, 2 or 4). Coupon dates are found by stepping **back from
+maturity** in steps of 12 ÷ frequency months, each date computed **from the maturity date** (so a bond maturing on 31 August pays on
+28/29 February and 31 August). If the day doesn't exist in a month, use the month's last day.
+
+The **previous coupon date** for a settlement date is the latest coupon date **on or before** it. Settling on a coupon date means
+nothing has accrued.
 
 ## Accrued interest
 
-- Accrues from the **last coupon date on or before settlement** to the settlement date. Settling **on** a coupon date accrues nothing.
-- Accrued = face × coupon rate × year fraction, rounded half-up to the cent.
-- **Settlement amount** = clean price (% of face) × face / 100 + accrued, rounded half-up to the cent.
+Accrued = face × rate × days ÷ 360, where days depends on the bond's day-count convention:
+- **ACT/360:** actual calendar days from the previous coupon date to settlement.
+- **30/360:** `360 × (Y2 − Y1) + 30 × (M2 − M1) + (D2 − D1)`, where D1 = 31 becomes 30, and D2 = 31 becomes 30 if D1 is 30 or 31.
 
-## Data model
-
-| Entity | Fields |
-|---|---|
-| Bond | id, coupon rate, frequency, maturity, day count |
-| Trade | trade id, bond, side, face, clean price, trade date, settlement date, accrued, settlement amount |
+A trade of N bonds at a clean price P (% of face): principal = N × face × P ÷ 100, accrued = N × accrued per bond. Amounts rounded to the cent.
 
 ## Example
 
-UST-like bond, 5% semi-annual, 30/360, matures 2030-05-15. $1,000,000 face at 99.50, traded Thu 2026-03-12 → settles Fri 2026-03-13.
-Last coupon 2025-11-15 → 118 days → accrued **$16,388.89** → settlement amount 995,000.00 + 16,388.89 = **$1,011,388.89**.
+$1,000 face, 5%, semiannual, 30/360, maturity 15 May 2031. Trade Mon 1 Jun 2026 → settles Wed 3 Jun; previous coupon 15 May →
+18 days → $2.50 per bond. 10 bonds at 101.25 → principal $10,125.00 + accrued $25.00 = **$10,150.00**.

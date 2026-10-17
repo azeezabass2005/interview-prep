@@ -1,67 +1,62 @@
-# R1-29 · Fitness Studio Booking: Interviewer Guide
+# R1-29 · Class Waitlist: Interviewer Guide
 
-~195 lines in `studio/`. One passing test (book until full). The bugs mostly live in `cancel` and `_promote`, both state transitions with
-side effects on another member.
+One file, `studio.py` (~85 lines), with one passing test (book, then waitlist). The spec example passes on the buggy code (one
+person on the waitlist, so LIFO = FIFO).
 
 ## Session plan (60 min)
-0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
+0–5 resume · 5–12 spec summary + questions · 12–17 code walk · 17–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
 | Question | Answer |
 |---|---|
-| Exactly 12 h before | Free (late = less than 12 h). |
-| Exactly 1 h before | Promotion still happens at exactly 60 min. |
-| Skipped PACK member | Stays on the waitlist in the same position. |
-| Premium joins after standard members | Goes ahead of all standard members, behind earlier premium ones. |
-| Spot freed in the last hour | Stays open; anyone can book it directly. |
-| Credits for waitlisting | None until promoted. |
+| Exactly 12 hours before | Free. |
+| Exactly 60 minutes before | Promotion still happens. |
+| Promoted PACK member with 0 credits | Can't happen: credits are checked when joining the waitlist (out of scope). |
+| Booked twice via the waitlist | Not allowed. |
+| Spot freed in the last hour | Anyone can book it directly. |
 
 ## Code map
-| Module | Responsibility |
-|---|---|
-| `services/members.py` | Plans, credits |
-| `services/booking.py` | Book, cancel, waitlist, promotion |
-| `store.py`, `api.py`, `app.py` | Storage, facade, wiring |
+`join` · `add_class` · `book` · `cancel` (fee, credits, promotion) · `_promote`.
 
 ## Planted bugs (5)
 
-### B1 · Waitlist ignores premium priority
-- **Where:** `booking.py::book`: `waitlist.append`.
-- **Test:** spec example → Pia promoted, not Sam.
-- **Fix:** insert premium members after the last premium entry.
+### B1 · Waitlisted member can book again
+- **Where:** `book` only checks `booked`.
+- **Test:** Ben waitlisted, books again → error (buggy: on the waitlist twice).
 
-### B2 · Promoted member stays on the waitlist
-- **Where:** `booking.py::_promote`: appends to `booked` without removing from `waitlist`.
-- **Test:** after promotion, the waitlist is empty.
+### B2 · Promotion is LIFO
+- **Where:** `_promote`: `pop()`.
+- **Test:** Ben then Cat waitlisted; Ana cancels → **Ben** booked.
 
-### B3 · Promotion in the last hour
-- **Where:** `booking.py::_promote`: no cutoff check (`PROMOTION_CUTOFF` unused).
-- **Test:** cancel 30 min before → nobody promoted.
+### B3 · Exactly 12 hours treated as late
+- **Where:** `cancel`: `<= LATE_WINDOW`.
+- **Test:** cancel at exactly −12 h → fee **$0.00**.
 
-### B4 · Late-cancelling PACK members get their credit back
-- **Where:** `booking.py::cancel`: refunds the credit regardless of timing.
-- **Test:** PACK member with 5 credits books (4), cancels 2 h before → still 4.
+### B4 · No credit refund on early cancel
+- **Where:** `cancel`.
+- **Test:** PACK 5 credits, book (4), cancel early → **5**.
 
-### B5 · PACK member with no credits gets promoted (credits go negative)
-- **Where:** `booking.py::_promote`: takes the first waitlisted member unconditionally.
-- **Test:** a PACK member waitlists, spends their last credit elsewhere; a later UNLIMITED member is promoted instead, and the PACK member stays waitlisted.
+### B5 · Promotion in the last hour
+- **Where:** `_promote`; `NO_PROMOTION` unused (clue).
+- **Test:** cancel 30 min before → nobody booked.
 
-Hints: (1) the spec sentence; (2) "what happens to the *other* member when someone cancels?"
+Hints: (1) "what happens to the *other* member when someone cancels?"; (2) "which constant is never used?"
 
 ## Red herrings
-- Waitlist cap of 10: correct.
-- UNLIMITED late fee $10: correct.
+- Waitlist cap 5: correct.
+- PACK late cancel: credit lost, no fee: correct.
 
 ## Questions about the candidate's fixes (data structures)
-- **B1:** "You insert into a list at the premium boundary: O(n). Alternatives?" (Two deques, premium and standard: O(1) append and popleft; or a heap keyed by (tier, seq).) "With two deques, how do you implement B5's skip without losing order?" (Iterate both in order; remove the chosen element; O(n) in the worst case but n ≤ 10.)
-- **B2:** "`member_id in cls.waitlist` is O(n). Is that a problem?" (No at n ≤ 10; for large lists keep a set alongside.)
-- **Concurrency:** "Two members cancel at the same moment on two servers. What can go wrong with promotion?" (Double promotion or over-capacity: needs an atomic roster update.)
+- **Waitlist as a list:** "`pop(0)` and `remove` are O(n). Alternatives?" (`deque` for popleft; leaving the waitlist from the middle is still O(n) — an ordered dict gives O(1) removal and FIFO order.)
+- **`name in c.booked`:** O(capacity). "When does that matter?" (Large classes or webinars: keep a set alongside.)
+- **Concurrency:** "Two cancellations at the same moment on two servers?" (Double promotion / over-capacity: atomic update of the roster.)
+- **Priority waitlist:** "Premium members first — which structure?" (Heap keyed by (tier, sequence) or two deques.)
 
 ## Feature requests
-1. **"Hold the promoted spot for 2 hours: the member must confirm or it passes to the next person."** Strong answer: a PENDING state with expiry; a scheduled check; credits only consumed on confirm.
-2. **"Recurring bookings: book every Tuesday 18:00 spin for 8 weeks."** Strong answer: create bookings per class instance; partial failures (some full → waitlist); credits needed upfront.
-3. **"No-show penalty: members booked but not checked in get a strike; 3 strikes block booking for a week."** Strong answer: check-in events; a strikes window; enforcement in `book`.
+1. **"Promoted members must confirm within 2 hours or the spot passes on."** Strong answer: PENDING state with expiry; scheduled check; credits used on confirm.
+2. **"No-show strikes: 3 no-shows block booking for a week."** Strong answer: check-in events; rolling window; enforced in `book`.
+3. **"Premium members jump the waitlist."** Strong answer: insert after the last premium; or two queues; test ordering.
 
 ## Scoring signals
-- **Strong:** traces the side effects of `cancel` on other members; spots `PROMOTION_CUTOFF` unused; constructs the zero-credit scenario.
-- **Weak:** only tests a single member's view.
+- **Strong:** tests with two people on the waitlist; uses a fake clock for time boundaries; checks PACK credits through a full cycle.
+- **Weak:** single-member scenarios.

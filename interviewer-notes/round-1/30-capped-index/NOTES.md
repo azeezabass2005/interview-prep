@@ -1,71 +1,62 @@
-# R1-30 · Capped Index Rebalance: Interviewer Guide
+# R1-30 · Capped Index: Interviewer Guide
 
-~170 lines in `indexing/`. One passing test (two equal constituents). Squarely in Bloomberg Index Services' domain: eligibility screens,
-float adjustment, iterative capping, published weights, turnover.
+One file, `capped.py` (~85 lines), with one passing test (two equal stocks). **The spec example fails on the
+buggy code** (B1: one capping pass leaves B at 30%), the natural first test. This one is squarely in Bloomberg Index Services' domain.
 
 ## Session plan (60 min)
-0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
+0–5 resume · 5–12 spec summary + questions · 12–17 code walk · 17–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
 | Question | Answer |
 |---|---|
-| Exactly 15% float / exactly 90 days | Eligible ("at least"). |
-| Exactly at the cap | Allowed. |
-| Proportional to what | Current weights of uncapped constituents. |
-| Infeasible cap (n × cap < 1) | Error (already handled). |
-| Residue recipient | Largest uncapped, ties alphabetical. |
-| Turnover units | Percent, one-way. |
+| Exactly at the cap | Allowed (not "above"). |
+| Proportional to what? | Current weights of uncapped stocks. |
+| Residue recipient when all are capped | Any (alphabetical first). Out of scope. |
+| A stock leaving the index | Its whole old weight counts in turnover. |
+| Infeasible cap | Error (already handled). |
 
 ## Code map
-| Module | Responsibility |
-|---|---|
-| `services/eligibility.py` | Screens |
-| `services/weighting.py` | Float cap, raw weights, capping, publishing |
-| `services/rebalance.py` | Orchestration, history, turnover |
-| `store.py`, `api.py`, `app.py` | Storage, facade, wiring |
+`eligible` · `raw_weights` · `apply_cap` · `publish` · `turnover` · `IndexCalculator.rebalance`.
 
 ## Planted bugs (5)
 
-### B1 · Capping is a single pass
-- **Where:** `weighting.py::apply_cap`.
-- **Test:** the spec example (cap 25%) → A/B/C 25.0000, D 16.6667, E 8.3333 (needs B2 fixed too).
-- **Fix:** loop until no constituent exceeds the cap, tracking which are already capped.
+### B1 · Capping is one pass
+- **Where:** `apply_cap`.
+- **Test:** the spec example → A/B/C 25.0000, D 16.6667, E 8.3333 (buggy B 30.0000).
 
-### B2 · Excess split equally
-- **Where:** `weighting.py::apply_cap`: `excess / len(under)`.
-- **Test:** cap 30%, sizes 40/24/24/12 → **30/28/28/14** (one pass suffices here, so this isolates B2).
-- **Fix:** `excess × w / Σ uncapped w`.
+### B2 · Rounding down, not half-up
+- **Where:** `publish`: `ROUND_DOWN`.
+- **Test:** sizes 1/1/1/3 → A **16.6667** (buggy 16.6666, with the residue dumped elsewhere).
 
-### B3 · 15% float excluded
-- **Where:** `eligibility.py`: `free_float > MIN_FREE_FLOAT`.
-- **Test:** a security with exactly 15% float is included.
+### B3 · Float ignored
+- **Where:** `raw_weights`.
+- **Test:** equal size, float 1.0 vs 0.5 → **66.6667 / 33.3333**.
 
-### B4 · Float ignored in the cap
-- **Where:** `weighting.py::float_cap`: `shares × price`.
-- **Test:** equal size, float 1.0 vs 0.5, cap 100% → **66.6667 / 33.3333**.
+### B4 · Residue can go to a capped stock
+- **Where:** `publish` ignores `cap` (parameter unused: clue).
+- **Test:** cap 50%, A capped, three equal others → A stays **50.0000** (buggy 49.9999).
 
-### B5 · Exactly 90 days of seasoning excluded
-- **Where:** `eligibility.py`: `days > 90`.
-- **Test:** listed exactly 90 days before the rebalance → included.
+### B5 · Turnover ignores removed stocks
+- **Where:** `turnover` iterates `new` only.
+- **Test:** {A 50, B 50} → {A 50, C 50} → **50** (buggy 25).
 
-Hints: (1) the spec sentence; (2) "turn the example into a test, then find which part fails".
+Hints: (1) "the example is your first test"; (2) "which parameter of `publish` is never read?"
 
 ## Red herrings
-- Residue to the largest uncapped constituent: correct.
-- Turnover formula: correct.
+- Eligibility uses `>=` everywhere: correct ("at least").
 - The infeasible-cap guard: correct.
 
 ## Questions about the candidate's fixes (data structures)
-- **B1:** "Your loop is O(k·n) where k = number of capping rounds (≤ n). Can you do better?" (Sort by weight descending once; walk from the top deciding capped vs uncapped with a running remainder: O(n log n). Nice, but the loop is clearer for n in the hundreds.) "Prove termination." (Each round caps at least one more constituent.)
-- **Publishing:** "Why add the residue to one name rather than distribute by largest remainder?" (Spec choice; discuss fairness vs simplicity.)
-- **History:** "History is a list of dicts per index. Turnover needs only the last one. Storage for 20 years of monthly rebalances?" (Tiny; but for daily ones consider storing only changes.)
-- **Eligibility:** "The universe scan is O(U) per rebalance. Would you index by anything?" (No: a full screen per rebalance is natural; precompute float caps once.)
+- **B1:** "Your loop is O(k·n), k ≤ n rounds. Faster?" (Sort descending once and walk, deciding capped vs uncapped with a running remainder: O(n log n).) "Prove termination." (Each round caps at least one more stock.)
+- **B4:** "Why must the residue avoid capped stocks?" (It could push them over the cap: the invariant.)
+- **History list:** "Turnover only needs the previous weights. Keep 20 years of daily history?" (Store only diffs or keep the last one in memory and the rest on disk.)
+- **Decimal precision:** "What precision context does Decimal use, and why does `excess * v / base` matter?" (28 digits by default; division error accumulates over rounds — negligible here.)
 
 ## Feature requests
-1. **"Sector cap: no sector above 30%, then single-name cap 10%."** Strong answer: two nested constraints; iterate until both hold (or a constrained optimisation); order matters; tests where the sector cap binds.
-2. **"Buffer rule: an existing constituent stays eligible unless its cap falls below $400M (not $500M)."** Strong answer: eligibility depends on previous membership; pass the previous constituents in; tests for both new and existing names.
-3. **"Index level continuity: compute a new divisor so the index level doesn't jump at rebalance."** Strong answer: divisor = new total float-adjusted value / previous level; store the level history; corporate actions also adjust the divisor.
+1. **"Sector cap of 30% on top of the single-stock cap."** Strong answer: nested constraints iterated until both hold; tests where the sector cap binds.
+2. **"Buffer rule: existing members stay eligible down to $400M."** Strong answer: eligibility depends on previous membership; pass the previous members in.
+3. **"Index level continuity with a divisor."** Strong answer: new divisor so the level doesn't jump at the rebalance; store the level history.
 
 ## Scoring signals
-- **Strong:** separates the two capping bugs with different tests; probes every "at least".
-- **Weak:** only the spec example, and can't explain why it fails.
+- **Strong:** tests the example first; reasons about the cap invariant for the residue; constructs a removal for turnover.
+- **Weak:** can't explain why the example fails after the first pass.

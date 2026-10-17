@@ -1,41 +1,24 @@
-# Prime Brokerage Margin Engine
+# Margin Call
 
-A prime broker lends clients cash against the securities they hold. Every evening a **margin run** values each account using the latest
-prices, and issues a **margin call** if collateral falls short. Clients cure calls by depositing cash. The repository contains the margin engine.
+A prime broker lends clients money against their portfolios. The margin engine values each account, works out how much collateral it
+needs, and issues **margin calls**. `margin.py` is the engine.
 
 ## Valuation
 
-- **Market value (MV)** = quantity × latest price. Longs have positive quantity, shorts negative.
-- **Haircut** by asset class: EQUITY **25%**, ETF **15%**, BOND **10%**.
-- **Concentration:** a long position worth **more than 40%** of the account's **gross long MV** (sum of long MVs) gets at least a **50%** haircut.
-- **Stale prices:** if a security's latest price is dated **before the previous calendar day** relative to the run date, add **10 percentage
-  points** to its haircut (after the concentration rule).
-- **Collateral** = Σ long MV × (1 − haircut) + cash if positive.
-- **Requirement** = loan (−cash, if cash is negative) + Σ |short MV| × **130%**.
-- **Excess** = collateral − requirement.
+- **Equity** = cash + Σ quantity × price over all positions. Short positions have negative quantity, so they **reduce** equity.
+  Cash can be negative (a loan).
+- **Requirement** = Σ |market value| × haircut, per position:
+  - long EQUITY 25%, long ETF 15%; any **short** position 30%.
+  - **Concentration:** a long position worth **more than 40% of the account's total long market value** has its haircut doubled.
+  - **Stale price:** if the latest price is **older than 15 minutes**, add 10 percentage points (after any doubling).
+- **Excess** = equity − requirement.
 
-## Calls
+## Margin calls
 
-- If excess is negative, a **margin call** is issued for −excess **rounded up to the next $100**, unless the account already has an open call.
-- A call is **met** when cash **deposited after the call was issued** adds up to at least the call amount, or when a later run shows
-  excess ≥ 0.
-
-## Liquidation plan
-
-For an unmet call, suggest whole shares to sell, **highest haircut first** (ties: larger MV first). Selling one share improves excess by
-price × haircut. Sell only as many as needed.
-
-## Data model
-
-| Entity | Fields |
-|---|---|
-| Security | symbol, asset class |
-| Price | symbol, date, price |
-| Account | account id, cash, positions (symbol → quantity) |
-| Call | account, issued on, amount, status (OPEN / MET) |
-| Deposit | account, date, amount |
+- When an evaluation finds negative excess and there's no open call, a call is issued for the deficit **rounded up to the next $100**.
+- Deposits made **after the call was issued** count toward it; when they cover it, the call is closed. Earlier deposits don't count.
 
 ## Example
 
-Cash −$100,000; AAPL 400 @ $200, TLT 300 @ $100, SPY 50 @ $400 (all prices from the run date). Gross long MV $130,000; AAPL is 61.5% → 50%.
-Collateral 40,000 + 27,000 + 17,000 = $84,000; requirement $100,000 → **call $16,000**. Plan: **sell 160 AAPL**.
+Cash −$80,000. Long 400 AAA (equity) @ $100, 300 BBB (equity) @ $100, 300 CCC (ETF) @ $100 (all fresh).
+Equity = −80,000 + 100,000 = $20,000. Requirement = 10,000 + 7,500 + 4,500 = $22,000. Call: **$2,000**.

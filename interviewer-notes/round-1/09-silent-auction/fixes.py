@@ -1,11 +1,8 @@
 FIXES = [
-    ("auction/services/pricing.py", "    return sorted(best.values(), key=lambda b: (b.maximum, b.seq), reverse=True)",
-     "    return sorted(best.values(), key=lambda b: (-b.maximum, b.seq))"),
-    ("auction/services/pricing.py", "runner_up + increment_for(winner.maximum)", "runner_up + increment_for(runner_up)"),
-    ("auction/services/bidding.py", "            lot.closes_at = lot.closes_at + timedelta(seconds=SOFT_CLOSE_SECONDS)",
-     "            lot.closes_at = now + timedelta(seconds=SOFT_CLOSE_SECONDS)"),
-    ("auction/services/invoices.py",
-     "        winning_bid = leading_bids(store.bids_for(lot.lot_id))[0]\n        premium = (winning_bid.maximum * PREMIUM_RATE)",
-     "        premium = (lot.hammer * PREMIUM_RATE)"),
-    ("auction/services/invoices.py", "        deductible = lot.hammer - lot.fmv", "        deductible = max(lot.hammer - lot.fmv, Decimal(\"0\"))"),
+    ("auction.py", "        if price > floor:", "        if price >= floor:"),
+    ("auction.py", "        return second + increment(second)", "        return min(second + increment(second), ranked[0][1][0])"),
+    ("auction.py", "key=lambda kv: (-kv[1][0], -kv[1][1])", "key=lambda kv: (-kv[1][0], kv[1][1])"),
+    ("auction.py", "            item.closes_at = item.closes_at + SOFT_CLOSE", "            item.closes_at = at + SOFT_CLOSE"),
+    ("auction.py", "        price = self.price(item_id)\n        premium",
+     "        price = self.price(item_id)\n        if item.reserve is not None and price < item.reserve:\n            return None\n        premium"),
 ]

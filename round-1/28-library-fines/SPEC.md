@@ -1,39 +1,32 @@
-# Library Circulation
+# Library Fines
 
-A city library system lends items from several branches. Patrons check items out, place **holds** on items that are out, renew loans
-and pay fines. The repository contains the circulation service.
-
-## Branch calendars
-
-Every branch is **closed on Sundays** and on its own list of holidays.
+A small library lends books and DVDs, keeps a holds queue and charges late fines. `library.py` handles circulation.
 
 ## Loans
 
-| Item type | Loan period | Fine per open day late | Max fine |
+| Item | Loan period | Fine per day late | Maximum fine |
 |---|---|---|---|
-| BOOK | 21 days | $0.25 | $20.00 |
-| DVD | 7 days | $1.00 | $25.00 |
+| BOOK | 21 days | $0.25 | $10.00 |
+| DVD | 3 days | $1.00 | $15.00 |
 
-- **Due date** = checkout date + loan period; if that day is closed at the lending branch, the **next open day**.
-- A patron may have at most **10** items out and **can't borrow while owing $10.00 or more**.
+- Due date = checkout date + loan period. The library is **closed on Sundays**: a due date falling on a Sunday moves to **Monday**.
+- A patron can have at most **5 items** out at once, and **can't borrow while owing $5.00 or more**.
 
 ## Returns and fines
 
-- Fines accrue for **open days** of the lending branch after the due date, up to and including the return date.
-- **Books:** returned **at most 1 open day late** → no fine; later than that, **every** late open day is fined.
-- A fine never exceeds the item's max fine. Fines are added to the patron's balance on return.
+Days late = return date − due date (calendar days). Fine = days late × daily fine, never more than the item's maximum. The fine is added
+to the patron's balance.
 
 ## Holds
 
-- A patron can place a hold on an item that's checked out. Holds are served **first come, first served**.
-- When an item with holds is returned, it goes to the hold shelf for the first patron in the queue (it can't be checked out by anyone else).
+Patrons can place holds on an item that's checked out. Holds are served **first come, first served**: when the item comes back, it's
+kept for the **first** patron in the queue, and nobody else can borrow it.
 
 ## Renewals
 
-- Books only, at most **2** renewals, only if not overdue and **only if nobody has a hold on the item**.
-- Each renewal moves the due date one loan period past the **current due date** (then to the next open day if needed).
+Books only, at most **2** times, not when overdue, not when someone has a hold. The new due date is one loan period after the **current
+due date** (moved to Monday if it's a Sunday).
 
 ## Example
 
-DVD checked out Mon 2026-03-02 → due Mon 03-09. Returned Mon 03-16: late days 03-10 … 03-16 = 7 calendar days, Sun 03-15 closed →
-**6 open days → $6.00**.
+DVD borrowed Thursday 5 March 2026 → due Sunday 8 March → **Monday 9 March**. Returned Friday 13 March → 4 days late → **$4.00**.

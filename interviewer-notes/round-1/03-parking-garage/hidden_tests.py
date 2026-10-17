@@ -1,47 +1,40 @@
 import unittest
-from datetime import date, datetime
+from datetime import datetime, timedelta
+from decimal import Decimal
 
-from garage.app import build_app
+from garage import Garage, GarageError
 
-
-class FakeClock:
-    def __init__(self, now):
-        self.current = now
-
-    def now(self):
-        return self.current
-
-
-def stay(entry, exit, plate="AB12CDE", pass_holder=False):
-    clock = FakeClock(entry)
-    api, _ = build_app(clock)
-    if pass_holder:
-        api.issue_pass({"plate": plate, "holder": "Pat", "valid_from": "2026-01-01", "valid_to": "2026-12-31"})
-    _, t = api.enter(plate)
-    clock.current = exit
-    return api.exit(t["ticket_id"])[1]["charge_cents"]
+T0 = datetime(2026, 5, 4, 9, 0)
 
 
 class HiddenGarage(unittest.TestCase):
-    def test_B1_cap_per_24_hours(self):
-        self.assertEqual(stay(datetime(2026, 3, 2, 10), datetime(2026, 3, 3, 12)), 3200)
+    def test_B1_fifteen_minutes_free(self):
+        g = Garage()
+        t = g.enter("A", T0)
+        self.assertEqual(g.amount_due(t, T0 + timedelta(minutes=15)), Decimal("0.00"))
 
-    def test_B2_fifteen_minutes_free(self):
-        self.assertEqual(stay(datetime(2026, 3, 3, 10), datetime(2026, 3, 3, 10, 15)), 0)
+    def test_B2_validation_reduces_time_not_money(self):
+        g = Garage()
+        t = g.enter("A", T0)
+        g.validate(t)
+        self.assertEqual(g.amount_due(t, T0 + timedelta(hours=10)), Decimal("20.00"))
 
-    def test_B3_nine_oclock_too_late_for_early_bird(self):
-        self.assertEqual(stay(datetime(2026, 3, 3, 9), datetime(2026, 3, 3, 17)), 2400)
-        self.assertEqual(stay(datetime(2026, 3, 3, 8, 59), datetime(2026, 3, 3, 17)), 1200)
+    def test_B3_daily_max_per_24_hours(self):
+        g = Garage()
+        t = g.enter("A", T0)
+        self.assertEqual(g.amount_due(t, T0 + timedelta(hours=26)), Decimal("26.00"))
 
-    def test_B4_public_cars_cannot_use_reserved_spaces(self):
-        clock = FakeClock(datetime(2026, 3, 3, 10))
-        api, _ = build_app(clock)
-        for i in range(200):
-            self.assertEqual(api.enter(f"PUB{i}")[0], 201)
-        self.assertEqual(api.enter("PUB200")[0], 409)
-        api.issue_pass({"plate": "PASS1", "holder": "Pat", "valid_from": "2026-01-01", "valid_to": "2026-12-31"})
-        self.assertEqual(api.enter("PASS1")[0], 201)
+    def test_B4_one_validation_per_ticket(self):
+        g = Garage()
+        t = g.enter("A", T0)
+        g.validate(t)
+        with self.assertRaises(GarageError):
+            g.validate(t)
 
-    def test_B5_pass_uses_entry_day(self):
-        self.assertEqual(stay(datetime(2026, 3, 6, 18), datetime(2026, 3, 7, 11), pass_holder=True), 0)
-        self.assertGreater(stay(datetime(2026, 3, 8, 18), datetime(2026, 3, 9, 8), pass_holder=True), 0)
+    def test_B5_reserved_spaces(self):
+        g = Garage(capacity=10, reserved=2)
+        for i in range(8):
+            g.enter(f"V{i}", T0)
+        with self.assertRaises(GarageError):
+            g.enter("V9", T0)
+        g.enter("P1", T0, permit=True)

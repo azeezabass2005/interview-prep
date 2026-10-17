@@ -1,14 +1,14 @@
 import unittest
+from decimal import Decimal
 
-from tab.app import build_app
+from tab import GroupTab
 
 
 class TestTab(unittest.TestCase):
-    def test_even_dinner(self):
-        api, _ = build_app()
-        api.create_group({"group_id": "g1", "name": "Trip", "members": ["ann", "bob"]})
-        api.add_expense("g1", {"payer": "ann", "amount_cents": 3000, "split": "EQUAL", "details": ["ann", "bob"]})
-        self.assertEqual(api.balances("g1"), (200, {"ann": 1500, "bob": -1500}))
+    def test_equal_split(self):
+        tab = GroupTab(["ana", "ben", "cai"])
+        tab.add_expense("ana", "30.00", ["ana", "ben", "cai"])
+        self.assertEqual(tab.balances(), {"ana": Decimal("20.00"), "ben": Decimal("-10.00"), "cai": Decimal("-10.00")})
 
 
 if __name__ == "__main__":

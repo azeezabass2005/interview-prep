@@ -1,45 +1,45 @@
 import unittest
+from datetime import datetime, timedelta
 from decimal import Decimal
 
-from gradebook.app import build_app
-from gradebook.services.grading import category_percent
+from gradebook import Gradebook
 
-DUE = "2026-03-01T23:59"
-
-
-def course(*items):
-    """items: (id, category, max, points or None, submitted_at)"""
-    api, store = build_app()
-    api.create("C", ["ana"])
-    for aid, cat, max_points, points, at in items:
-        api.assignment("C", {"id": aid, "category": cat, "max_points": max_points, "due": DUE})
-        if points is not None:
-            api.submit("C", "ana", aid, at or "2026-03-01T12:00")
-            api.grade("C", "ana", aid, points)
-    return api, store
-
-
-FULL = [("q", "QUIZ", 10, 10, None), ("hw", "HOMEWORK", 10, 10, None)]
+DUE = datetime(2026, 3, 1, 23, 59)
+LATER = datetime(2026, 4, 1)
 
 
 class HiddenGradebook(unittest.TestCase):
-    def test_B1_drop_lowest_percentage(self):
-        _, store = course(("a", "HOMEWORK", 10, 8, None), ("b", "HOMEWORK", 20, 15, None), ("c", "HOMEWORK", 20, 18, None))
-        self.assertEqual(round(category_percent(store.course("C"), "ana", "HOMEWORK"), 2), Decimal("86.67"))
+    def test_B1_started_day_counts(self):
+        g = Gradebook()
+        g.add_assignment("h1", "HOMEWORK", 10, DUE)
+        g.submit("h1", "ana", 10, DUE + timedelta(minutes=31))
+        self.assertEqual(g.category_percent("ana", "HOMEWORK", LATER), Decimal("90.00"))
 
-    def test_B2_started_late_days(self):
-        _, store = course(("a", "HOMEWORK", 10, 10, "2026-03-03T00:59"))
-        self.assertEqual(category_percent(store.course("C"), "ana", "HOMEWORK"), Decimal("80"))
+    def test_B2_excused_is_ignored(self):
+        g = Gradebook()
+        g.add_assignment("q1", "QUIZ", 10, DUE)
+        g.add_assignment("q2", "QUIZ", 10, DUE)
+        g.submit("q1", "ana", 10, DUE)
+        g.excuse("q2", "ana")
+        self.assertEqual(g.category_percent("ana", "QUIZ", LATER), Decimal("100.00"))
 
-    def test_B3_final_replaces_midterm(self):
-        api, _ = course(*FULL, ("m", "MIDTERM", 100, 60, None), ("f", "FINAL", 100, 90, None))
-        self.assertEqual(api.report("C", "ana")[1]["percent"], "95.00")
+    def test_B3_drop_lowest_percentage(self):
+        g = Gradebook()
+        g.add_assignment("h1", "HOMEWORK", 10, DUE)
+        g.add_assignment("h2", "HOMEWORK", 20, DUE)
+        g.submit("h1", "ana", 8, DUE)
+        g.submit("h2", "ana", 15, DUE)
+        self.assertEqual(g.category_percent("ana", "HOMEWORK", LATER), Decimal("80.00"))
 
-    def test_B4_rounded_before_letter(self):
-        api, _ = course(*FULL, ("m", "MIDTERM", 100, "79.9", None), ("f", "FINAL", 100, "79.9", None))
-        self.assertEqual(api.report("C", "ana")[1]["letter"], "A")
+    def test_B4_weights_rescaled(self):
+        g = Gradebook()
+        g.add_assignment("e1", "EXAM", 100, DUE)
+        g.submit("e1", "ana", 85, DUE)
+        self.assertEqual(g.final("ana", LATER), (Decimal("85.00"), "B"))
 
-    def test_B5_excused_removed(self):
-        api, store = course(("q1", "QUIZ", 10, 10, None), ("q2", "QUIZ", 10, None, None))
-        api.excuse("C", "ana", "q2")
-        self.assertEqual(category_percent(store.course("C"), "ana", "QUIZ"), Decimal("100"))
+    def test_B5_ninety_is_an_a(self):
+        g = Gradebook()
+        for aid, cat, possible, score in (("h1", "HOMEWORK", 10, 9), ("q1", "QUIZ", 10, 9), ("e1", "EXAM", 100, 90)):
+            g.add_assignment(aid, cat, possible, DUE)
+            g.submit(aid, "ana", score, DUE)
+        self.assertEqual(g.final("ana", LATER), (Decimal("90.00"), "A"))

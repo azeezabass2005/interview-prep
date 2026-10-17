@@ -1,24 +1,27 @@
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from fx.app import build_app
+from fx import FxDesk
+
+T0 = datetime(2026, 7, 1, 12, 0, 0)
 
 
-class FakeClock:
-    def __init__(self):
-        self.current = datetime(2026, 4, 1, 12, 0, 0)
+class Clock:
+    def __init__(self, now):
+        self.current = now
 
     def now(self):
         return self.current
 
 
 class TestFx(unittest.TestCase):
-    def test_eur_to_usd_quote_and_book(self):
-        api = build_app(FakeClock())
-        api.publish("EURUSD", "1.0850")
-        status, quote = api.quote({"customer": "c1", "source": "EUR", "amount": "1000", "target": "USD"})
-        self.assertEqual((status, quote["target_amount"]), (201, "1074.15"))
-        self.assertEqual(api.book(quote["quote_id"])[0], 201)
+    def test_book_fresh_quote(self):
+        clock = Clock(T0)
+        desk = FxDesk(clock)
+        desk.set_rate("EUR", "0.92")
+        q = desk.quote("acme", "USD", "EUR", 1000)
+        clock.current = T0 + timedelta(seconds=5)
+        self.assertEqual(desk.book(q["quote_id"])["status"], "BOOKED")
 
 
 if __name__ == "__main__":

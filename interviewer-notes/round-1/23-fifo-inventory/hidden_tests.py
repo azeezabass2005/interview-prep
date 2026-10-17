@@ -1,36 +1,44 @@
 import unittest
+from datetime import date
+from decimal import Decimal
 
-from inventory.app import build_app
+from inventory import Inventory
+
+JAN, FEB, MAR, APR = date(2026, 1, 5), date(2026, 2, 5), date(2026, 3, 5), date(2026, 4, 5)
 
 
 class HiddenInventory(unittest.TestCase):
-    def setUp(self):
-        self.api, self.store = build_app()
+    def test_B1_oldest_lot_first(self):
+        inv = Inventory()
+        inv.receive("W1", "X", 5, "10", JAN)
+        inv.receive("W1", "X", 5, "12", FEB)
+        self.assertEqual(inv.ship("s1", "W1", "X", 3), Decimal("30"))
 
-    def test_B1_oldest_first(self):
-        self.api.receive("W", "NJ", 100, "2.00", "2026-01-01")
-        self.api.receive("W", "NJ", 50, "2.50", "2026-01-05")
-        self.assertEqual(self.api.ship("S1", "W", "NJ", 50)[1]["cogs"], "100.00")
+    def test_B2_all_or_nothing(self):
+        inv = Inventory()
+        inv.receive("W1", "X", 5, "10", JAN)
+        with self.assertRaises(Exception):
+            inv.ship("s1", "W1", "X", 8)
+        self.assertEqual(inv.on_hand("W1", "X"), 5)
 
-    def test_B2_short_shipment_changes_nothing(self):
-        self.api.receive("W", "NJ", 10, "2.00", "2026-01-01")
-        self.assertEqual(self.api.ship("S1", "W", "NJ", 15)[0], 409)
-        self.assertEqual(self.api.value("W", "NJ")[1]["on_hand"], 10)
+    def test_B3_transfer_keeps_received_date(self):
+        inv = Inventory()
+        inv.receive("A", "X", 5, "10", JAN)
+        inv.receive("B", "X", 5, "12", FEB)
+        inv.transfer("A", "B", "X", 2, MAR)
+        self.assertEqual([l.received for l in inv.lots("B", "X")], [JAN, FEB])
 
-    def test_B3_partial_layer_keeps_remainder(self):
-        self.api.receive("W", "NJ", 100, "2.00", "2026-01-01")
-        self.api.ship("S1", "W", "NJ", 30)
-        self.assertEqual(self.api.value("W", "NJ")[1]["value"], "140.00")
+    def test_B4_return_at_shipment_cost(self):
+        inv = Inventory()
+        inv.receive("W1", "X", 5, "10", JAN)
+        inv.ship("s1", "W1", "X", 2)
+        inv.receive("W1", "X", 5, "15", FEB)
+        inv.return_goods("s1", 1, MAR)
+        self.assertEqual(inv.value("W1", "X"), Decimal("115"))
 
-    def test_B4_transfers_keep_received_date(self):
-        self.api.receive("W", "NJ", 10, "1.00", "2026-01-01")
-        self.api.receive("W", "NY", 10, "5.00", "2026-02-01")
-        self.api.receive("W", "NY", 10, "7.00", "2026-04-01")
-        self.api.transfer("W", "NJ", "NY", 10, "2026-03-01")
-        self.assertEqual(self.api.ship("S1", "W", "NY", 10)[1]["cogs"], "10.00")
-
-    def test_B5_return_at_shipment_average(self):
-        self.api.receive("W", "NJ", 100, "2.00", "2026-01-01")
-        self.api.ship("S1", "W", "NJ", 40)
-        self.api.receive("W", "NJ", 10, "3.00", "2026-01-05")
-        self.assertEqual(self.api.return_units("S1", 5, "2026-01-09")[1]["unit_cost"], "2.0000")
+    def test_B5_reorder_at_the_point(self):
+        inv = Inventory()
+        inv.set_reorder_point("W1", "X", 3)
+        inv.receive("W1", "X", 5, "10", JAN)
+        inv.ship("s1", "W1", "X", 2)
+        self.assertEqual(inv.reorders, [("W1", "X")])

@@ -1,50 +1,32 @@
-# Solar Net-Metering Billing
+# Solar Net Metering
 
-An electric utility bills homes with rooftop solar. Each home has a meter with two **cumulative registers**: kWh **imported** from the grid
-and kWh **exported** to it. A meter reader records both registers roughly once a month; each new reading closes a **billing period** that
-starts at the previous reading. The repository contains the billing service.
+A utility bills homes with rooftop solar. Each meter has two **cumulative** registers: kWh imported from the grid and kWh exported to
+it. Each meter reading produces a bill. `netmeter.py` does the billing.
 
-## Usage for a period
+## Readings
 
-- Usage is the difference between this reading and the previous one, per register.
-- Registers are 5-digit and **roll over**: after 99,999 they continue from 00,000. A smaller reading than last time means the register rolled over.
-- **Net usage** = imported − exported.
+- The first reading of a customer is the baseline (no bill).
+- Usage for a period = current register − previous register. Registers are 5 digits and **roll over from 99,999 to 0**.
 
-## Banking
+## Bill
 
-If net usage is negative, the surplus kWh are **banked**. Banked kWh are used to offset future net usage **before** tiered pricing.
-Banked kWh that are used are removed from the bank.
+1. **Net** = imported − exported.
+2. If net is negative, the excess kWh are **banked** (kWh credit) and there's no energy charge.
+3. If net is positive, banked kWh are used first (reducing the bank), then the rest is charged:
+   - the first **500 kWh** at **$0.15**, the rest at **$0.20**.
+   - The 500 kWh tier is for a 30-day period; for other lengths it's **prorated**: 500 × days ÷ 30, rounded to a whole kWh.
+4. Every bill has a **$10.00** fixed charge.
 
-## Energy charge
+## True-up
 
-Tiered on the billable kWh (net usage after banked credit). Tier sizes are given **per 30 days** and scaled to the period's length
-(number of days between readings), rounded down to whole kWh:
+Once a year the bank is settled: banked kWh are paid out at **$0.05/kWh** and the bank goes back to **zero**.
 
-| Tier | Size per 30 days | Rate |
-|---|---|---|
-| 1 | first 500 kWh | $0.12 |
-| 2 | next 500 kWh | $0.15 |
-| 3 | everything above | $0.20 |
+## Reports
 
-## Other charges
-
-- **Daily service charge:** **$0.40 per day** in the period. Not taxed.
-- **Tax:** **5% of the energy charge only**, rounded half-up to the cent.
-
-## Annual true-up
-
-On the bill whose period **ends** in **December**, any kWh still banked (after this bill) are **paid out at $0.04/kWh** as a separate line,
-and the bank is reset to zero.
-
-## Data model
-
-| Entity | Fields |
-|---|---|
-| Account | account id, address |
-| Reading | read on (date), import register, export register |
-| Bill | period start/end, days, imported, exported, billable kWh, energy, tax, service, total, true-up payout |
+- `history(customer)`: the customer's bills in order. `summary(customer)`: number of bills, kWh imported and exported, total
+  charged and the current bank.
+- `estimate(customer, days)`: estimated net kWh for a period, from the average daily net usage of the last 3 bills (never negative).
 
 ## Example
 
-Previous reading 2026-01-01 (import 10,000, export 2,000); reading 2026-01-31 (import 10,700, export 2,100). 30 days, net 600 kWh:
-energy 500 × 0.12 + 100 × 0.15 = $75.00, tax $3.75, service $12.00 → **$90.75**.
+30-day period, imported 650, exported 100 → net 550 → 500 × 0.15 + 50 × 0.20 = 85.00, + 10.00 = **$95.00**.

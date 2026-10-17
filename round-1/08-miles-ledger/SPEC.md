@@ -1,52 +1,27 @@
-# Frequent Flyer Program
+# Miles Ledger
 
-An airline's loyalty program awards miles for flights, gives members **status** based on how much they fly, lets them **redeem** miles
-for award tickets and **transfer** miles to other members. The repository contains the loyalty service.
+An airline's frequent-flyer programme. Members earn miles on flights, reach status tiers, redeem miles, transfer them to other members,
+and lose them after a period of inactivity. `miles.py` is the ledger.
 
 ## Earning
 
-- **5 miles per whole dollar** of base fare (cents don't earn). These are **base miles**.
-- **Status bonus** on top of base miles: Silver **+25%**, Gold **+50%**, Platinum **+100%** (bonus rounded down). Base members get no bonus.
-  The member's status **at the time of the flight** applies.
-- Each flight's miles (base + bonus) form one **lot** dated the flight date.
-- Cancelling a flight removes that flight's miles: whatever is still unspent in its lot is removed and the flight no longer counts for status.
+- **Base miles** = distance × fare-class multiplier (Y 1.0 · J 1.5 · F 2.0), rounded down.
+- **Status bonus** on top of base miles: SILVER +25%, GOLD +50% of the **base miles**, rounded down. The bonus uses the member's status
+  at the time of the flight.
 
 ## Status
 
-Status depends on **qualifying miles** earned in the current calendar year. **Only base miles from flights qualify** (no bonuses, no
-transfers).
+- **Qualifying miles** = **base** miles earned in a calendar year (bonus miles don't qualify).
+- SILVER at 25,000 qualifying miles, GOLD at 50,000. Status applies from the next flight after reaching it, and **lasts until the end of
+  the following calendar year**.
 
-| Qualifying miles this year | Status |
-|---|---|
-| 0 – 24,999 | Base |
-| 25,000 – 49,999 | Silver |
-| 50,000 – 74,999 | Gold |
-| 75,000+ | Platinum |
+## Redeeming, transferring, expiry
 
-Status changes immediately when a threshold is crossed, so it applies to the next flight.
-
-## Expiry
-
-Miles expire on the **2-year anniversary** of their lot date; from that day on they can't be used.
-**Platinum members' miles don't expire** while they are Platinum.
-
-## Redemption
-
-Spends the **oldest usable miles first**. If the member doesn't have enough usable miles, nothing is spent.
-
-## Transfers
-
-A member can transfer **1,000 miles or more** to another member. The sender's miles are taken oldest-first; the receiver gets one new lot
-dated the **transfer date**. Transferred miles never count as qualifying miles.
-
-## Data model
-
-| Entity | Fields |
-|---|---|
-| Member | member id, name |
-| Flight | flight id, member, date, base fare, cancelled? |
-| Lot | member, date, miles, remaining, source (FLIGHT / TRANSFER), flight id |
+- Redeem any amount up to the balance.
+- Transfer miles to another member: at most **50,000 miles sent per calendar year** in total. Transfers don't count as activity.
+- **Expiry:** if a member has no activity (a flight or a redemption) for **18 months**, their whole balance expires. Activity on a day
+  keeps miles alive until the same day 18 months later.
 
 ## Example
 
-A Gold member flies a $412.80 fare on 2026-01-10: base 412 × 5 = 2,060 miles, bonus 1,030 → **3,090 miles**, usable until 2028-01-09.
+A SILVER member flies 2,000 miles in J → base 3,000, bonus 750 → **3,750 miles**.

@@ -1,32 +1,32 @@
-# Robo-Advisor Rebalancing
+# Portfolio Rebalancer
 
-A robo-advisor manages client accounts against **model portfolios** (target weights per symbol). Periodically it produces a rebalance plan
-of whole-share trades for each account. The repository contains the model registry, the planner and the order builder.
+A robo-advisor keeps each client's account close to a **model portfolio** (target weights per ticker). `rebalance.py` decides whether an
+account needs rebalancing and produces the trade list.
+
+## When to rebalance
+
+Current weight = market value ÷ total account value (holdings + cash). An account is rebalanced only if some ticker's current weight
+differs from its target by **more than 5 percentage points** (tickers held but not in the model have target 0%).
 
 ## Targets
 
-- **Total value** = cash + Σ shares × price.
-- **Cash buffer:** **2%** of total value stays in cash; model weights apply to the remaining 98%.
-- **Restrictions:** a client can restrict symbols (e.g. their employer's stock). A restricted symbol is **never bought**; its model weight
-  is **redistributed to the other symbols in proportion to their model weights**. Existing restricted holdings are sold down to zero.
+- Keep a **2% cash buffer**: targets apply to 98% of the investable value.
+- **Restricted tickers** (per client) are never traded. Their current value is excluded from the investable value, and the other tickers'
+  targets are **scaled up proportionally** so they add up to 100%.
 
-## Plan
+## Trades
 
-- A holding is traded only if |target value − current value| is **more than 5% of total value** (restricted holdings are always sold).
-- Trade quantity = (target − current) ÷ price, **rounded toward zero** (never overshoot).
-- **Sells first**, then buys, **largest dollar underweight first** (ties: alphabetical).
-- A buy may only spend cash above the buffer; buy fewer shares if needed.
+- For each unrestricted ticker: target value − current value, divided by price, in **whole shares, rounded toward zero** (never trade
+  more than needed).
 - Trades worth less than **$100** are skipped.
+- The trade list has **all sells before all buys** (sells raise the cash for buys); within each group, alphabetical.
 
-## Data model
+## Executing a plan
 
-| Entity | Fields |
-|---|---|
-| Model | name, weights (symbol → %) |
-| Account | account id, model, cash, holdings (symbol → shares), restricted symbols |
-| Trade | side, symbol, shares |
+`execute` applies a trade list in order: sells add cash, buys spend it. Restricted tickers can't be traded, you can't sell more than you
+hold, and a buy needs enough cash at that point. `weights` reports each holding's current weight (and cash's).
 
 ## Example
 
-Model 40% AAA / 60% BBB. Cash $2,000, AAA 100 @ $50, BBB 10 @ $300 → total $10,000, investable $9,800 → AAA $3,920, BBB $5,880.
-Plan: **SELL AAA 21**, **BUY BBB 9**.
+Model 60% VTI / 40% BND. Holdings VTI 100 @ $70 ($7,000), BND 50 @ $60 ($3,000), no cash → VTI is 70% (drift 10). Investable $9,800 →
+VTI target $5,880 → **SELL 16 VTI**; BND target $3,920 → **BUY 15 BND**.

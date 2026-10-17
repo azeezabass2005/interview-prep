@@ -1,26 +1,18 @@
 import unittest
 from datetime import datetime
+from decimal import Decimal
 
-from auction.app import build_app
+from auction import SilentAuction
 
-
-class FakeClock:
-    def __init__(self, now):
-        self.current = now
-
-    def now(self):
-        return self.current
+CLOSE = datetime(2026, 6, 1, 20, 0)
 
 
 class TestAuction(unittest.TestCase):
-    def test_single_bidder_pays_opening(self):
-        clock = FakeClock(datetime(2026, 5, 1, 19, 0))
-        api, _ = build_app(clock)
-        api.add_lot({"lot_id": "L1", "opening": "50", "fmv": "40", "closes_at": "2026-05-01T21:00:00"})
-        api.register(101, "Ann")
-        api.bid("L1", 101, "120")
-        clock.current = datetime(2026, 5, 1, 21, 0)
-        self.assertEqual(api.close("L1")[1], {"winner": 101, "hammer": "50"})
+    def test_single_bidder_pays_start(self):
+        a = SilentAuction()
+        a.add_item("vase", 50, CLOSE)
+        a.bid("vase", "ana", 80, datetime(2026, 6, 1, 18, 0))
+        self.assertEqual(a.price("vase"), Decimal("50"))
 
 
 if __name__ == "__main__":

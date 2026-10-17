@@ -1,25 +1,10 @@
 FIXES = [
-    ("fees/services/commission.py",
-     """    for upper, rate in EQUITY_TIERS:
-        if upper is None or amount <= upper:
-            return amount * rate
-    raise AssertionError("tier table must end with an unbounded band")""",
-     """    total, lower = Decimal("0"), Decimal("0")
-    for upper, rate in EQUITY_TIERS:
-        top = amount if upper is None else min(amount, upper)
-        if top > lower:
-            total += (top - lower) * rate
-        if upper is None or amount <= upper:
-            return total
-        lower = upper
-    raise AssertionError("tier table must end with an unbounded band")"""),
-    ("fees/services/commission.py", "    return clamp(half_up(OPTION_PER_CONTRACT * contracts), OPTION_MIN, EQUITY_MAX)",
-     "    return clamp(half_up(OPTION_PER_CONTRACT * contracts), OPTION_MIN)"),
-    ("fees/services/regulatory.py", "from ..money import ZERO, half_up", "from ..money import ZERO, always_up"),
-    ("fees/services/regulatory.py", "    return half_up(notional(trade) * REG_FEE_RATE)", "    return always_up(notional(trade) * REG_FEE_RATE)"),
-    ("fees/services/statements.py", "if start <= t.executed_at.date() <= end]", "if start <= t.executed_at.date() < end]"),
-    ("fees/services/statements.py",
-     "        for number, trade in enumerate(self.trades_in_month(account_id, year, month), start=1):\n            if trade.status != ACTIVE:\n                continue\n",
-     "        active = [t for t in self.trades_in_month(account_id, year, month) if t.status == ACTIVE]\n"
-     "        for number, trade in enumerate(active, start=1):\n"),
+    ("commission.py", "        return max(min(raw, cap), MIN_COMMISSION).quantize(CENT, ROUND_HALF_UP)",
+     "        return min(max(raw, MIN_COMMISSION), cap).quantize(CENT, ROUND_HALF_UP)"),
+    ("commission.py", "        rate = low_rate if done < threshold else BANDS[1][1]\n        raw = trade.quantity * rate",
+     "        first = max(0, min(trade.quantity, threshold - done))\n        raw = first * low_rate + (trade.quantity - first) * BANDS[1][1]"),
+    ("commission.py", "from decimal import ROUND_HALF_UP, Decimal", "from decimal import ROUND_HALF_UP, ROUND_UP, Decimal"),
+    ("commission.py", "rounding=ROUND_HALF_UP)", "rounding=ROUND_UP)"),
+    ("commission.py", "if t.kind == \"EQUITY\" and t.month == month)",
+     "if t.kind == \"EQUITY\" and t.month == month and t.account == account and not t.busted)"),
 ]

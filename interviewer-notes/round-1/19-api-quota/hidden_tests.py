@@ -1,64 +1,52 @@
 import unittest
+from datetime import datetime, timedelta
 from decimal import Decimal
 
-from metering.app import build_app
+from quota import Meter
 
-T0 = Decimal("1772323200")
-
-
-class FakeClock:
-    def __init__(self):
-        self.t = T0
-
-    def time(self):
-        return self.t
-
-    def at(self, seconds):
-        self.t = T0 + Decimal(str(seconds))
+T0 = datetime(2026, 1, 10, 12, 0, 0)
 
 
-def world(plan="FREE"):
-    clock = FakeClock()
-    api, store = build_app(clock)
-    api.register("c", plan)
-    return api, store, clock
+def meter(plan="FREE"):
+    m = Meter()
+    m.create_key("k", plan, T0)
+    return m
 
 
-def allowed(api, endpoint="/quote"):
-    return api.request("c", endpoint)[1]["allowed"]
+def use(m, total, cost, start=T0):
+    at = start
+    for _ in range(total // cost):
+        at += timedelta(seconds=3)
+        assert m.request("k", at, cost) == 200
+    return at
 
 
-class HiddenMetering(unittest.TestCase):
-    def test_B1_refill_capped(self):
-        api, _, clock = world()
-        for _ in range(10):
-            allowed(api)
-        clock.at(100)
-        self.assertEqual([allowed(api) for _ in range(11)], [True] * 10 + [False])
+class HiddenQuota(unittest.TestCase):
+    def test_B1_bucket_never_exceeds_capacity(self):
+        m = meter()
+        m.request("k", T0, 10)
+        later = T0 + timedelta(seconds=10)
+        m.request("k", later, 10)
+        self.assertEqual(m.request("k", later, 1), 429)
 
-    def test_B2_retry_after_uses_refill_rate(self):
-        api, _, _ = world("PRO")
-        for _ in range(5):
-            allowed(api, "/bulk")
-        self.assertEqual(api.request("c", "/bulk")[1]["retry_after"], "1.0")
+    def test_B2_rejected_request_takes_no_tokens(self):
+        m = meter()
+        m.request("k", T0, 8)
+        m.request("k", T0, 5)
+        self.assertEqual(m.request("k", T0 + timedelta(seconds=1), 6), 200)
 
-    def test_B3_fractional_refill(self):
-        api, _, clock = world()
-        for _ in range(10):
-            allowed(api)
-        clock.at("1.5")
-        self.assertTrue(allowed(api))
-        clock.at("2.0")
-        self.assertTrue(allowed(api))
+    def test_B3_usage_resets_each_month(self):
+        m = meter()
+        use(m, 1000, 10)
+        m.request("k", datetime(2026, 2, 1, 0, 0, 1), 1)
+        self.assertEqual(m.monthly_usage("k", "2026-02"), 1)
 
-    def test_B4_rejected_requests_not_metered(self):
-        api, store, _ = world()
-        for _ in range(11):
-            allowed(api)
-        month = next(iter(store.client("c").usage))
-        self.assertEqual(api.invoice("c", month)[1]["units"], 10)
+    def test_B4_free_hard_limit_is_1000(self):
+        m = meter()
+        at = use(m, 1000, 10)
+        self.assertEqual(m.request("k", at + timedelta(seconds=3), 1), 429)
 
-    def test_B5_overage_only_above_allowance(self):
-        api, store, _ = world("PRO")
-        store.client("c").usage["2026-03"] = 1_000_500
-        self.assertEqual(api.invoice("c", "2026-03")[1]["total"], "500.50")
+    def test_B5_overage_only_above_included(self):
+        m = meter("PRO")
+        use(m, 100_500, 50)
+        self.assertEqual(m.invoice("k", "2026-01"), Decimal("50.00"))

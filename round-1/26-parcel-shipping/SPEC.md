@@ -1,33 +1,35 @@
-# Checkout Shipping
+# Parcel Shipping
 
-An online store prices shipping at checkout by rating every package with two carriers and picking the cheaper one, and shows an estimated
-delivery date. The repository contains the rating and estimation service.
+An online shop shows shipping options at checkout and picks the best one. `shipping.py` prices parcels with two carriers and
+estimates delivery dates.
 
-## Billable weight (per carrier)
+## Billable weight
 
-- **Dimensional weight** = L × W × H ÷ the carrier's divisor, where each dimension (inches) is first **rounded up** to a whole inch.
-  Divisors: SPEEDY **139**, VALUE **166**.
-- **Billable weight** = greater of actual and dimensional weight, **rounded up** to a whole pound (at least 1).
+`max(actual kg, dimensional kg)`, where dimensional kg = length × width × height (cm) ÷ 5000. Rounded **up** to the next 0.5 kg.
 
-## Package rate (per carrier)
+## Price per carrier
 
-1. **Base:** first pound + each additional pound, by zone (see `config.py` for both carriers' tables).
-2. **Oversize:** longest side **more than 48 in** adds **$15.00**.
-3. **Fuel surcharge:** SPEEDY 12%, VALUE 9%, of (base + oversize), rounded half-up to the cent.
-4. **Residential:** **$4.50** per package, added after fuel (no fuel on it).
+| Carrier | Base | Per kg zone 1 | Per kg zone 2 | Oversize | Business days zone 1 / 2 |
+|---|---|---|---|---|---|
+| SWIFT | $8.00 | $2.00 | $3.00 | $15.00 | 1 / 2 |
+| BUDGET | $5.00 | $1.50 | $2.50 | $20.00 | 3 / 5 |
 
-## Order shipping
+- **Fuel surcharge 10%** of base + weight charge only.
+- **Oversize** (any side over 120 cm) and **residential** ($3.00, both carriers) surcharges are added after fuel; no fuel on them.
+- Prices rounded to the cent.
 
-- Each package is rated with both carriers; the order uses **one** carrier for all packages: the one with the lower order total
-  (ties: SPEEDY).
-- **Free shipping:** if the order subtotal **after discounts** is **$75 or more** and the zone is **1–4**, shipping is free.
+## Delivery
 
-## Delivery estimate
+- Orders placed **after 15:00** ship the next business day; otherwise the same day (if it's a business day).
+- Delivery date = ship date + the carrier's business days (Monday–Friday only).
 
-- Orders placed **at or after 14:00** (warehouse time), or on a weekend, ship on the **next business day**; otherwise the same day.
-- Transit: SPEEDY 2 business days, VALUE 4. Business days are Monday–Friday.
+## Choosing
+
+- Only options delivering on or before the customer's deadline (if any) are offered.
+- Orders of **$100 or more** ship **free with BUDGET** — if BUDGET meets the deadline.
+- Otherwise the cheapest option; ties go to SWIFT.
 
 ## Example
 
-12 × 10 × 8 in, 6.2 lb, zone 5, residential, SPEEDY: dim 960/139 = 6.91 → **7 lb**. Base 9.00 + 6 × 1.10 = 15.60; fuel 1.87;
-residential 4.50 → **$21.97**.
+3 kg, 40 × 30 × 20 cm (dimensional 4.8 → billable 5.0 kg), zone 2, residential:
+BUDGET 5.00 + 12.50 = 17.50, fuel 1.75, + 3.00 = **$22.25**; SWIFT 8.00 + 15.00 = 23.00, fuel 2.30, + 3.00 = **$28.30**.

@@ -1,38 +1,44 @@
 import unittest
+from datetime import date
 from decimal import Decimal
 
-from library.app import build_app
+from library import Library
 
 
-def world():
-    api, store = build_app()
-    api.setup({"MAIN": []}, {"b1": ("BOOK", "MAIN"), "d1": ("DVD", "MAIN")}, ["ann", "bob"])
-    return api, store
+def lib():
+    l = Library()
+    for item, kind in (("b1", "BOOK"), ("d1", "DVD")) + tuple((f"x{i}", "BOOK") for i in range(6)):
+        l.add_item(item, kind)
+    for p in ("ana", "bob", "cat"):
+        l.add_patron(p)
+    return l
 
 
 class HiddenLibrary(unittest.TestCase):
-    def test_B1_sundays_closed(self):
-        api, _ = world()
-        api.checkout("ann", "d1", "2026-03-02")
-        self.assertEqual(api.check_in("d1", "2026-03-16")[1]["fine"], "6.00")
+    def test_B1_sunday_due_date_moves_to_monday(self):
+        self.assertEqual(lib().checkout("ana", "d1", date(2026, 3, 5)).due, date(2026, 3, 9))
 
-    def test_B2_grace_forgives_one_day_only(self):
-        api, _ = world()
-        api.checkout("ann", "b1", "2026-03-02")
-        self.assertEqual(api.check_in("b1", "2026-03-25")[1]["fine"], "0.50")
+    def test_B2_fine_is_capped(self):
+        l = lib()
+        l.checkout("ana", "d1", date(2026, 3, 5))
+        self.assertEqual(l.check_in("d1", date(2026, 4, 20)), Decimal("15.00"))
 
     def test_B3_renewal_from_due_date(self):
-        api, _ = world()
-        api.checkout("ann", "b1", "2026-03-02")
-        self.assertEqual(api.renew("b1", "2026-03-10")[1]["due"], "2026-04-13")
+        l = lib()
+        l.checkout("ana", "b1", date(2026, 3, 2))
+        self.assertEqual(l.renew("b1", date(2026, 3, 10)).due, date(2026, 4, 13))
 
-    def test_B4_no_renewal_with_holds(self):
-        api, _ = world()
-        api.checkout("ann", "b1", "2026-03-02")
-        api.hold("bob", "b1")
-        self.assertEqual(api.renew("b1", "2026-03-10")[0], 409)
+    def test_B4_holds_first_come_first_served(self):
+        l = lib()
+        l.checkout("ana", "b1", date(2026, 3, 2))
+        l.place_hold("bob", "b1")
+        l.place_hold("cat", "b1")
+        l.check_in("b1", date(2026, 3, 9))
+        self.assertEqual(l.hold_shelf["b1"], "bob")
 
-    def test_B5_blocked_at_ten_dollars(self):
-        api, store = world()
-        store.patrons["ann"].balance = Decimal("10.00")
-        self.assertEqual(api.checkout("ann", "b1", "2026-03-02")[0], 409)
+    def test_B5_returned_items_do_not_count_toward_limit(self):
+        l = lib()
+        for i in range(5):
+            l.checkout("ana", f"x{i}", date(2026, 3, 2))
+        l.check_in("x0", date(2026, 3, 3))
+        self.assertEqual(l.checkout("ana", "x5", date(2026, 3, 3)).item, "x5")

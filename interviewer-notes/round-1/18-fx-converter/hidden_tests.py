@@ -1,50 +1,48 @@
 import unittest
 from datetime import datetime, timedelta
+from decimal import Decimal
 
-from fx.app import build_app
+from fx import FxDesk
+
+T0 = datetime(2026, 7, 1, 12, 0, 0)
 
 
-class FakeClock:
-    def __init__(self):
-        self.current = datetime(2026, 4, 1, 12, 0, 0)
+class Clock:
+    def __init__(self, now):
+        self.current = now
 
     def now(self):
         return self.current
 
 
-def world():
-    clock = FakeClock()
-    api = build_app(clock)
-    for pair, rate in (("EURUSD", "1.0850"), ("GBPUSD", "1.2700"), ("USDJPY", "151.20")):
-        api.publish(pair, rate)
-    return api, clock
-
-
-def quote(api, source, amount, target, customer="c1"):
-    return api.quote({"customer": customer, "source": source, "amount": amount, "target": target})[1]
+def desk():
+    clock = Clock(T0)
+    d = FxDesk(clock)
+    for ccy, rate in (("EUR", "0.92"), ("GBP", "0.80"), ("JPY", "155")):
+        d.set_rate(ccy, rate)
+    return d, clock
 
 
 class HiddenFx(unittest.TestCase):
-    def test_B1_usd_base_pairs_inverted(self):
-        api, _ = world()
-        self.assertEqual(quote(api, "JPY", "1512", "USD")["target_amount"], "9.90")
+    def test_B1_cross_rate_direction(self):
+        d, _ = desk()
+        self.assertEqual(round(d.mid("EUR", "GBP"), 6), Decimal("0.869565"))
 
-    def test_B2_tier_on_usd_equivalent(self):
-        api, _ = world()
-        self.assertEqual(quote(api, "GBP", "9000", "USD")["target_amount"], "11372.85")
+    def test_B2_spread_against_the_client(self):
+        d, _ = desk()
+        self.assertEqual(d.quote("acme", "USD", "EUR", 1000)["receive"], Decimal("915.40"))
 
-    def test_B3_round_down(self):
-        api, _ = world()
-        self.assertEqual(quote(api, "EUR", "100", "USD")["target_amount"], "107.41")
+    def test_B3_jpy_has_no_decimals(self):
+        d, _ = desk()
+        self.assertEqual(str(d.quote("acme", "USD", "JPY", 100)["receive"]), "15422")
 
-    def test_B4_expired_quote_rejected(self):
-        api, clock = world()
-        q = quote(api, "EUR", "100", "USD")
-        clock.current += timedelta(seconds=31)
-        self.assertEqual(api.book(q["quote_id"])[0], 409)
+    def test_B4_bookable_at_30_seconds(self):
+        d, clock = desk()
+        q = d.quote("acme", "USD", "EUR", 100)
+        clock.current = T0 + timedelta(seconds=30)
+        self.assertEqual(d.book(q["quote_id"])["status"], "BOOKED")
 
-    def test_B5_cancelled_payments_free_the_limit(self):
-        api, _ = world()
-        first = api.book(quote(api, "EUR", "36866.36", "USD")["quote_id"])[1]
-        api.cancel(first["payment_id"])
-        self.assertEqual(api.book(quote(api, "EUR", "36866.36", "USD")["quote_id"])[0], 201)
+    def test_B5_limit_in_usd_equivalent(self):
+        d, _ = desk()
+        q = d.quote("acme", "JPY", "USD", 1_000_000)
+        self.assertEqual(d.book(q["quote_id"])["status"], "BOOKED")

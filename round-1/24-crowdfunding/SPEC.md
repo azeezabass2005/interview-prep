@@ -1,29 +1,24 @@
-# All-or-Nothing Crowdfunding
+# Crowdfunding
 
-Creators run **all-or-nothing** campaigns: backers pledge during the campaign; only if the goal is reached by the deadline are their cards
-charged. The repository contains the campaign, pledge and settlement service.
-
-## Campaigns and tiers
-
-- A campaign has a **goal**, a **deadline** and reward **tiers**, each with a **minimum pledge** and an optional **quantity limit**.
-- A tier that has reached its limit is **sold out**.
+A crowdfunding platform runs all-or-nothing campaigns. Backers pledge money, optionally for a reward tier; cards are charged only if the
+campaign reaches its goal. `crowd.py` manages pledges and settles campaigns.
 
 ## Pledges
 
-- Pledging, **changing** a pledge (amount and/or tier) and **cancelling** are allowed only **before the deadline**.
-- A pledge's amount must be at least its tier's minimum. Pledging into or changing to a sold-out tier is rejected.
-- A cancelled pledge no longer counts for anything (total, tier limits, charges).
+- A campaign has a goal, a deadline, and reward tiers (minimum pledge and a limited number of slots).
+- Pledges can be made, changed or cancelled **before the deadline** (at the deadline it's closed).
+- A backer has at most one pledge per campaign. Changing a pledge can change the amount and/or tier.
+- A tier needs a pledge of at least its minimum, and a free slot. **Cancelling or changing tier frees the slot.**
 
-## Settlement (at the deadline)
+## Settlement (after the deadline)
 
-- The campaign is **funded** if the total of active pledges is **at least** the goal. Otherwise nothing is charged and no fees apply.
-- If funded, every active pledge's card is charged. Some charges **fail**; failed pledges are written off (not collected).
-- **Fees** on a funded campaign: platform **5% of the collected amount**; processing **3% of the collected amount + $0.20 per
-  successful charge**. Fees are rounded half-up to the cent.
-- **Creator payout** = collected − platform fee − processing fee.
-- **Stretch goal:** if active pledges at the deadline reach **150% of the goal**, every DELUXE backer gets a bonus reward.
+- The campaign is **funded** if total pledges are **at least** the goal. Otherwise nobody is charged.
+- If funded, every pledge is charged. A declined charge is **retried once**; if it fails again the pledge is dropped (listed as failed).
+- **Collected** = successful charges.
+- Fees: platform **5% of collected**; payment processing **3% + $0.20 per successful charge**. Every fee is rounded to the cent.
+- **Creator payout** = collected − fees.
 
 ## Example
 
-Goal $1,000; STANDARD (min $35), DELUXE (min $100, limit 50). 20 × $35 STANDARD + 5 × $100 DELUXE = $1,200 → funded.
-All charges succeed: platform $60.00; processing $36.00 + 25 × $0.20 = $41.00 → **payout $1,099.00**.
+Goal $5,000. Pledges $3,000 and $2,500, both charged → collected $5,500; platform $275.00; processing 165.00 + 0.40 = $165.40;
+payout **$5,059.60**.

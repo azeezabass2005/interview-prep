@@ -1,30 +1,25 @@
-# Course Gradebook
+# Gradebook
 
-A university course posts assignments, collects timestamped submissions, and computes final grades according to its syllabus. The
-repository contains the gradebook service.
+A course's gradebook computes each student's grade from weighted categories, with late penalties, excused work and a dropped
+homework. `gradebook.py` holds the rules.
 
-## Syllabus
+## Assignments and submissions
 
-- **Categories and weights:** HOMEWORK 30% · QUIZ 20% · MIDTERM 20% · FINAL 30%.
-- **Homework** category score = total points earned ÷ total points possible. With 2 or more homeworks, the **lowest homework by
-  percentage** is dropped.
-- **Quizzes:** simple average of each quiz's percentage.
-- **Final replaces midterm:** if the final exam percentage is higher than the midterm's, the midterm counts at the final's percentage.
+- Categories and weights: **HOMEWORK 30%**, **QUIZ 20%**, **EXAM 50%**.
+- An assignment has a category, points possible and a due date-time.
+- **Late penalty:** 10% of the points possible **per started day late** (1 minute late = 1 day). More than **5 days** late scores 0.
+  Scores never go below 0.
+- After the due date, a missing submission counts as **0**. Before it, the assignment is ignored.
+- An **excused** assignment is ignored for that student (as if it didn't exist).
 
-## Submissions
+## Category and final grade
 
-- Each assignment has a due date-time. A submission after it is **late**; the number of late days is the number of **started 24-hour
-  periods** after the deadline (1 minute late = 1 day, 25 hours = 2 days).
-- **Homework** loses **10% of its max points per late day**; more than **3 late days** scores **0**. Penalties apply before the drop.
-  Other categories have no late penalty.
-- An assignment with **no submission** scores 0. An **excused** assignment is removed as if it didn't exist.
-- Graders may **regrade** a submission; the latest grade counts.
-
-## Letter grades
-
-Round the course percentage to **one decimal place** (half-up), then: A ≥ 90 · B ≥ 80 · C ≥ 70 · D ≥ 60 · F otherwise.
+- Category % = total earned ÷ total possible across its counted assignments.
+- **Drop lowest homework:** if a student has at least 2 counted homeworks, the one with the **lowest percentage** is dropped.
+- Final % = weighted average of the categories that have at least one counted assignment (weights are rescaled to add up to 100%).
+- Percentages are rounded to 2 decimals. Letters: **A ≥ 90**, B ≥ 80, C ≥ 70, D ≥ 60, otherwise F.
 
 ## Example
 
-Homeworks 8/10, 15/20, 18/20 (on time) → drop 15/20 → 26/30 = 86.67%. Quizzes 100%, 80% → 90%. Midterm 70%, final 85% → midterm counts 85%.
-Course = 0.3 × 86.67 + 0.2 × 90 + 0.2 × 85 + 0.3 × 85 = **86.5% → B**.
+Homework 18/20 and 7/10 (the 70% one is dropped → 90%), quiz 8/10 (80%), exam 80/100 (80%) →
+0.3 × 90 + 0.2 × 80 + 0.5 × 80 = **83.00 → B**.

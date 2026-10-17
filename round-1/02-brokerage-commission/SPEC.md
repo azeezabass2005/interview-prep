@@ -1,51 +1,36 @@
-# Brokerage Fee Engine
+# Brokerage Commission
 
-A retail broker charges fees on every equity and option trade and sends each account a **monthly statement**. Trades arrive from the
-execution system during the day; occasionally the exchange **busts** (cancels) a trade after the fact. The repository contains the fee
-engine that records trades and produces statements.
+A retail broker charges commission and passes on a regulatory fee for every trade. Trades can later be **busted** (cancelled by the
+exchange). Each month every account gets a statement. `commission.py` calculates the charges.
 
 ## Equity commission
 
-Commission is tiered on the trade's **notional** (price × quantity), like tax brackets:
+- **Per-share rate** depends on the account's equity volume **earlier in the same calendar month**:
 
-| Portion of notional | Rate |
+| Monthly shares (cumulative) | Rate per share |
 |---|---|
-| first $10,000 | 0.10% |
-| $10,000 – $50,000 | 0.05% |
-| above $50,000 | 0.02% |
+| first 300,000 | $0.005 |
+| above 300,000 | $0.003 |
 
-Equity commission is rounded half-up to the cent, then a **minimum of $1.00** and a **maximum of $50.00** apply.
+  An order that crosses the 300,000 boundary pays each share at the rate of the band it falls into.
+- **Minimum** $1.00 per order, but the commission **never exceeds 1% of the trade value**, even if that's below the minimum.
+- Commission is rounded to the nearest cent.
 
-## Option commission
+## Options commission
 
-**$0.65 per contract**, minimum **$1.00** per trade. There is **no maximum** for options. An option contract covers 100 shares, so an
-option trade's notional is contracts × price × 100.
+$0.65 per contract, minimum $1.00 per order. One contract = 100 shares (value = contracts × premium × 100). Options don't count toward
+equity volume.
 
 ## Regulatory fee
 
-On **sells only** (equities and options): notional × **0.0000278**, always rounded **up** to the next cent. It's not commission:
-no minimum, no maximum, no discount.
+On **SELL** trades only (equity and options): trade value × 0.0000278, **rounded up** to the next cent.
 
-## Volume discount
+## Busted trades
 
-From an account's **51st trade of the calendar month** onward (counting equity and option trades in execution-time order), the commission
-is discounted by **20%** (discount rounded half-up to the cent). **Busted trades don't count**: they're treated as if they never happened.
+A busted trade is refunded (commission and fee), leaves the statement and **doesn't count toward monthly volume**. Commissions already
+charged on later trades are not recalculated.
 
-## Statements
+## Example
 
-A statement covers one calendar month: trades executed from the 1st at 00:00 up to, but not including, the 1st of the next month.
-It lists one line per non-busted trade (commission, discount, regulatory fee, total) and the month's total.
-
-## Data model
-
-| Entity | Fields |
-|---|---|
-| Account | account id, owner |
-| Trade | trade id, account, asset class (EQUITY / OPTION), side (BUY / SELL), quantity or contracts, price, executed at, status (ACTIVE / BUSTED) |
-| Statement line | trade id, commission, discount, regulatory fee, total |
-
-## Examples
-
-- Equity buy, notional $60,000 → 10.00 + 20.00 + 2.00 = **$32.00** commission.
-- Equity sell, notional $5,000 → **$5.00** commission + **$0.14** regulatory fee (0.139 rounded up).
-- Option buy, 10 contracts → **$6.50** commission.
+BUY 1,000 shares @ $150.00 → $5.00. SELL 1,000 @ $151.00 → commission $5.00, fee 151,000 × 0.0000278 = 4.1978 → **$4.20**.
+Statement total for the month: **$14.20**.

@@ -1,30 +1,31 @@
-# Capped Index Rebalance
+# Capped Index
 
-An index provider runs a **capped, float-adjusted market-cap-weighted** equity index. At each rebalance it selects constituents from the
-universe, computes weights, publishes them, and reports turnover versus the previous weights. The repository contains the rebalance service.
+An index provider runs a capped, **float-adjusted** market-cap-weighted equity index. At each rebalance it picks eligible stocks,
+computes and publishes weights, and reports turnover. `capped.py` does the calculation.
 
-## Eligibility (on the rebalance date)
+## Eligibility
 
-A security is eligible if:
-- its **free float** (fraction of shares available to trade) is **at least 15%**,
-- its **price is above $1.00**,
-- its **full market cap** (shares × price) is **at least $500 million**,
-- it has been listed for **at least 90 days** before the rebalance date.
+Free float (fraction of shares tradable) **at least 15%**, price **at least $1.00**, full market cap (shares × price) **at least $500 million**.
 
 ## Weights
 
-1. **Float-adjusted market cap** = shares × free float × price.
-2. **Raw weight** = float-adjusted cap ÷ sum over eligible securities.
-3. **Capping:** no constituent may weigh **more than the cap** (10% in production; configurable per index). Weight above the cap is removed
-   and **redistributed to uncapped constituents in proportion to their weights**; repeat until no constituent exceeds the cap.
-4. **Publishing:** weights in percent to **4 decimal places** (half-up). Rounding residue goes to the **largest uncapped** constituent
-   (ties: alphabetical) so the weights add up to exactly **100.0000**.
+1. **Float-adjusted cap** = shares × free float × price. Raw weight = float-adjusted cap ÷ total.
+2. **Capping:** no stock may weigh more than the cap. Weight above the cap is removed and given to the **uncapped** stocks **in proportion
+   to their weights**. Repeat until no stock is above the cap.
+3. **Publishing:** weights in percent, rounded **half-up to 4 decimals**. The rounding difference (so the total is exactly 100.0000) is
+   added to the **largest uncapped** stock (ties: alphabetical).
 
 ## Turnover
 
-One-way turnover = ½ × Σ |new weight − previous weight| over the union of old and new constituents (missing = 0), in percent.
+½ × Σ |new weight − previous weight| over **every stock in either the old or new index** (a stock not in one of them counts as 0).
+The first rebalance has turnover 0.
+
+## Reports
+
+- `constituents()`: tickers in the latest index; `changes()`: tickers added and removed at the latest rebalance.
+- `capped()`: tickers whose published weight is at the cap.
 
 ## Example (cap 25%)
 
-Float caps in proportion A 50 · B 20 · C 15 · D 10 · E 5 → A capped at 25, excess to B–E in proportion → B 30 → capped, excess to C–E →
-published **A 25.0000 · B 25.0000 · C 25.0000 · D 16.6667 · E 8.3333**.
+Float-adjusted caps in proportion A 50 · B 20 · C 15 · D 10 · E 5 → A capped at 25; its excess goes to B–E in proportion → B 30 → capped;
+its excess to C–E → **A 25.0000 · B 25.0000 · C 25.0000 · D 16.6667 · E 8.3333**.

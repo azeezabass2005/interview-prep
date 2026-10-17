@@ -1,18 +1,17 @@
 import unittest
+from datetime import date
+from decimal import Decimal
 
-from drip.app import build_app
+from drip import DripProcessor
 
 
 class TestDrip(unittest.TestCase):
-    def test_us_cash_holder(self):
-        api, _ = build_app()
-        api.open_account({"account_id": "A1", "name": "Ann", "country": "US"})
-        api.record_movement({"account_id": "A1", "security": "BBG", "on": "2026-01-05", "shares": "100"})
-        api.declare({"event_id": "Q1", "security": "BBG", "record_date": "2026-03-10", "pay_date": "2026-03-31",
-                     "per_share": "0.82", "reinvest_price": "40.00"})
-        status, body = api.process("Q1")
-        self.assertEqual(status, 200)
-        self.assertEqual(body["payments"][0]["cash_paid"], "82.00")
+    def test_cash_dividend(self):
+        d = DripProcessor()
+        d.open_account("a1", "US")
+        d.trade("a1", "XYZ", date(2026, 3, 1), 100)
+        [p] = d.pay_dividend("XYZ", "0.25", date(2026, 3, 10), date(2026, 3, 15), "40")
+        self.assertEqual(p["cash"], Decimal("25.00"))
 
 
 if __name__ == "__main__":

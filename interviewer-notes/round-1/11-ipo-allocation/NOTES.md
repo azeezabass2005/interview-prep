@@ -1,77 +1,61 @@
-# R1-11 · IPO Bookbuilding and Allocation: Interviewer Guide
+# R1-11 · IPO Allocation: Interviewer Guide
 
-~255 lines in `ipo/`. One passing test (an undersubscribed book). Allocation is a multi-stage algorithm; most bugs only appear when a
-tranche is oversubscribed or when price limits and tranches interact. The spec's example exercises B1, B2 and B3 together.
+One file, `ipo.py` (~90 lines), with one passing test (small retail order). The spec example passes on the buggy code.
 
 ## Session plan (60 min)
-0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
+0–5 resume · 5–12 spec summary + questions · 12–17 code walk · 17–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
 | Question | Answer |
 |---|---|
-| Order whose limit equals the final price | Stays in (limit ≥ price). |
-| Retail/institutional category after an amend | Recomputed from the amended size. |
-| Unused institutional shares → retail? | No, only retail → institutional. |
-| Retail tranche not a whole number of lots | Round the tranche down to whole lots (as coded). |
-| Pro-rata base for retail | Remaining demand after the guaranteed lot. |
-| Ties on unfilled demand | Earliest order (lowest sequence; amends get a new sequence). |
-| Cancelled then re-submitted | Allowed; new sequence. |
+| Limit equal to the price | Eligible. |
+| Both tranches undersubscribed | Everyone filled; unsold shares stay with the issuer. |
+| Retail spare when retail is short by 50 shares | Spare = exact shares, not lots. |
+| Amend down | Keeps priority. |
+| Amend up and then down again | The later priority stays. |
 
 ## Code map
-| Module | Responsibility |
-|---|---|
-| `services/book.py` | Create offering, submit / amend / cancel orders |
-| `services/closing.py` | Final price, eligibility, tranche sizing, orchestration |
-| `services/allocation.py` | Guarantee lot, pro-rata, leftover lots within a tranche |
-| `reporting.py`, `store.py`, `api.py`, `app.py` | Report (correct), storage, facade, wiring |
+`place` · `amend` · `cancel` · `_eligible` · `_pro_rata` (rounding + leftover loop) · `allocate` (tranches).
 
 ## Planted bugs (5)
 
-### B1 · Orders priced below the final price aren't dropped
-- **Where:** `closing.py::close`: `live` keeps every active order regardless of `limit`.
-- **Test:** i1 3,000 @ $21 and i3 6,000 @ $19; final price $20 → i3 gets nothing.
-- **Fix:** `o.limit >= price` in the `live` filter.
-- **Hints:** "What happens to an order with a limit under the final price?"
+### B1 · Limit equal to the price excluded
+- **Where:** `_eligible`: `o.limit > price`.
+- **Test:** institutional 500 with limit $20.00, price $20.00 → 500 (buggy 0).
 
-### B2 · Unused retail shares are lost
-- **Where:** `closing.py::close`: the institutional tranche is always `shares − retail_tranche`.
-- **Test:** retail r1 1,000; institutional i1 9,000 → i1 gets 9,000 (buggy 8,000; 1,000 shares stay with the issuer).
-- **Fix:** `unused = max(0, retail_tranche - retail_demand)`; add it to the institutional tranche.
-- **Hints:** "Light retail demand: where do the retail shares go?"
+### B2 · Amending up keeps priority
+- **Where:** `amend`.
+- **Test:** A 300, B 200, C 300; B amended to 300; 800 available → 266.67 each → leftovers to **A and C** (267, 266, 267).
 
-### B3 · Pro-rata rounds to the nearest lot
-- **Where:** `allocation.py::to_lots`: `round()`.
-- **Test:** retail fully used (r1, r2 at 1,000 each); institutional i1 6,500, i2 4,500 for 8,000 → i1 **4,800**, i2 **3,200** (buggy 4,700 / 3,300). Can over-allocate in other cases.
-- **Fix:** floor: `int(shares // LOT_SIZE) * LOT_SIZE`.
-- **Hints:** "What does 'rounded down to whole lots' mean for 3,272.7?"
+### B3 · Spare tranche shares don't move
+- **Where:** `allocate`.
+- **Test:** retail asks 100 of 200 → institutional gets 900 (buggy 800).
 
-### B4 · Leftover-lot ties go to the latest order
-- **Where:** `allocation.py::allocate_tranche`: `max(..., key=(unfilled, seq))`.
-- **Test:** retail full; i1, i2, i3 each 3,000 for 8,000 → 2,700 / 2,700 / 2,600 (earliest two get the extra lots).
-- **Fix:** key `(unfilled, -seq)`.
-- **Hints:** "Equal orders, odd number of leftover lots."
+### B4 · Retail not rounded to lots
+- **Where:** `allocate` passes `lot=1` for retail; `RETAIL_LOT` is unused (clue).
+- **Test:** 200 retail shares, R1 300 and R2 100 → pro rata 150 / 50 → lots 100 / 0 → leftover lot to R1 → **200 / 0**.
 
-### B5 · Amended orders keep their old time priority
-- **Where:** `book.py::amend`: doesn't assign a new `seq`.
-- **Test:** the B4 setup, but i1 amends its limit after i3 submits → i2 and i3 get the extra lots; i1 2,600.
-- **Fix:** `order.seq = self._store.next_seq()` on amend.
-- **Hints:** "The spec says an amended order is a new order for time priority."
+### B5 · Cancelled orders still allocated
+- **Where:** `_eligible`.
+- **Test:** cancelled 900-share order doesn't dilute the live one → 800 (buggy 400).
+
+Hints: (1) "which constant is never used?"; (2) "design a case where leftovers are decided by priority".
 
 ## Red herrings
-- `min(to_lots(...), unfilled)` caps pro-rata at demand: correct and good.
-- Category derived from size: correct.
+- The leftover loop's `gave` guard: correct (prevents infinite loops when everyone is full).
+- Limit `None` = any price: correct.
 
 ## Questions about the candidate's fixes (data structures)
-- **B4:** "The leftover loop rescans all candidates per lot: O(L × n). Faster?" (A max-heap keyed by `(-unfilled, seq)`; pop, give a lot, push back if still unfilled: O(L log n). Or observe L < n after floor-rounding, so at most one lot each: a single sort is O(n log n).)
-- **B5:** "Orders are stored in a dict investor → order. Why does that make 'one order per investor' easy, and what would you lose if you needed order history?" (Amends overwrite; keep an append-only list of versions for audit.)
-- **B2:** "Where should the tranche maths live?" (A small pure function `tranche_sizes(offering, retail_demand)`: easy to unit test.)
-- **General:** "Why integers (shares) and Decimal (prices)?"
+- **`_pro_rata` leftover loop:** "Complexity?" (Sort O(n log n) + leftover rounds; leftover < n lots, so O(n) per round.) "Largest-remainder method instead?" (Give leftovers to the biggest fractional parts — fairer; a different spec.)
+- **B2:** "A global counter gives priority. What if two servers take orders?" (Need a single sequence: DB sequence or timestamp + tie-breaker.)
+- **Orders dict:** "Investors want to see their orders: O(N) scan. Index?" (investor → set of order ids.)
+- **Integer arithmetic:** "Why `shares * available // demand` and not `shares / demand * available`?" (Exact integers; float rounding errors at the boundary.)
 
 ## Feature requests
-1. **"Priority investors: anchor investors get 100% of their order filled before pro-rata, up to 30% of the institutional tranche."** Strong answer: a pre-allocation stage with a cap; how to split the cap if anchors exceed it (pro-rata among anchors); order of stages documented.
-2. **"Price range bookbuilding: show the demand curve (shares demanded at each price) while the book is open."** Strong answer: aggregate by limit and compute a cumulative sum from the highest price down; sorted structure (SortedDict-like / bisect on prices); recompute vs incremental updates on amend/cancel.
-3. **"Greenshoe: the underwriter may allocate up to 15% extra shares."** Strong answer: the effective offering size is a parameter; reporting distinguishes base vs over-allotment.
+1. **"Cap any single investor at 5% of the offering."** Strong answer: apply cap, then redistribute the excess pro rata (iterate until stable — like index capping).
+2. **"Priority allocation for anchor investors."** Strong answer: anchors filled first from the institutional tranche; the rest pro rata.
+3. **"Greenshoe: 15% extra shares if demand > 3× offering."** Strong answer: increase available before tranches; decide which tranche gets them.
 
 ## Scoring signals
-- **Strong:** turns the spec example into a test, sees it fail, then isolates each cause with smaller tests (separate tranche-reallocation test, rounding test).
-- **Weak:** treats the example failure as one bug and patches until it passes.
+- **Strong:** tests each tranche in isolation, then their interaction; constructs a leftover tie.
+- **Weak:** only undersubscribed books (everyone filled).

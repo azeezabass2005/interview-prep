@@ -1,12 +1,13 @@
 import unittest
 from datetime import datetime, timedelta
+from decimal import Decimal
 
-from studio.app import build_app
+from studio import Studio
 
 START = datetime(2026, 9, 2, 18, 0)
 
 
-class FakeClock:
+class Clock:
     def __init__(self, now):
         self.current = now
 
@@ -14,56 +15,49 @@ class FakeClock:
         return self.current
 
 
-def studio():
-    clock = FakeClock(START - timedelta(days=1))
-    api = build_app(clock)
-    api.add_class("spin", START.isoformat(), 1)
-    api.add_class("yoga", START.isoformat(), 5)
-    for m, plan, credits in (("ana", "UNLIMITED", 0), ("sam", "UNLIMITED", 0), ("pia", "PREMIUM", 0), ("pk", "PACK", 5)):
-        api.join(m, plan, credits)
-    return api, clock
+def studio(capacity=1):
+    clock = Clock(START - timedelta(days=1))
+    s = Studio(clock)
+    s.add_class("spin", START, capacity)
+    for name in ("ana", "ben", "cat"):
+        s.join(name, "UNLIMITED")
+    s.join("pam", "PACK", 5)
+    return s, clock
 
 
 class HiddenStudio(unittest.TestCase):
-    def test_B1_premium_first(self):
-        api, clock = studio()
-        api.book("spin", "ana")
-        api.book("spin", "sam")
-        api.book("spin", "pia")
+    def test_B1_no_second_place_from_the_waitlist(self):
+        s, _ = studio()
+        s.book("spin", "ana")
+        s.book("spin", "ben")
+        with self.assertRaises(Exception):
+            s.book("spin", "ben")
+
+    def test_B2_first_on_waitlist_promoted(self):
+        s, clock = studio()
+        s.book("spin", "ana")
+        s.book("spin", "ben")
+        s.book("spin", "cat")
         clock.current = START - timedelta(hours=20)
-        api.cancel("spin", "ana")
-        self.assertEqual(api.roster("spin")[1]["booked"], ["pia"])
+        s.cancel("spin", "ana")
+        self.assertEqual(s.classes["spin"].booked, ["ben"])
 
-    def test_B2_promoted_leaves_waitlist(self):
-        api, clock = studio()
-        api.book("spin", "ana")
-        api.book("spin", "sam")
-        api.cancel("spin", "ana")
-        self.assertEqual(api.roster("spin")[1]["waitlist"], [])
+    def test_B3_exactly_12_hours_is_free(self):
+        s, clock = studio()
+        s.book("spin", "ana")
+        clock.current = START - timedelta(hours=12)
+        self.assertEqual(s.cancel("spin", "ana"), Decimal("0.00"))
 
-    def test_B3_no_promotion_in_last_hour(self):
-        api, clock = studio()
-        api.book("spin", "ana")
-        api.book("spin", "sam")
+    def test_B4_early_cancel_refunds_credit(self):
+        s, _ = studio(5)
+        s.book("spin", "pam")
+        s.cancel("spin", "pam")
+        self.assertEqual(s.members["pam"].credits, 5)
+
+    def test_B5_no_promotion_in_last_hour(self):
+        s, clock = studio()
+        s.book("spin", "ana")
+        s.book("spin", "ben")
         clock.current = START - timedelta(minutes=30)
-        api.cancel("spin", "ana")
-        self.assertEqual(api.roster("spin")[1]["booked"], [])
-
-    def test_B4_late_cancel_forfeits_credit(self):
-        api, clock = studio()
-        api.book("yoga", "pk")
-        clock.current = START - timedelta(hours=2)
-        api.cancel("yoga", "pk")
-        self.assertEqual(api.member("pk")[1]["credits"], 4)
-
-    def test_B5_pack_member_without_credits_skipped(self):
-        api, clock = studio()
-        api.join("pk", "PACK", 1)
-        api.book("spin", "ana")
-        api.book("spin", "pk")
-        api.book("yoga", "pk")
-        api.book("spin", "sam")
-        api.cancel("spin", "ana")
-        roster = api.roster("spin")[1]
-        self.assertEqual((roster["booked"], roster["waitlist"]), (["sam"], ["pk"]))
-        self.assertEqual(api.member("pk")[1]["credits"], 0)
+        s.cancel("spin", "ana")
+        self.assertEqual(s.classes["spin"].booked, [])

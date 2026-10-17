@@ -1,24 +1,17 @@
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
+from decimal import Decimal
 
-from garage.app import build_app
+from garage import Garage
 
-
-class FakeClock:
-    def __init__(self, now):
-        self.current = now
-
-    def now(self):
-        return self.current
+T0 = datetime(2026, 5, 4, 9, 0)
 
 
 class TestGarage(unittest.TestCase):
-    def test_two_hour_stay(self):
-        clock = FakeClock(datetime(2026, 3, 3, 10, 0))
-        api, _ = build_app(clock)
-        _, ticket = api.enter("AB12 CDE")
-        clock.current = datetime(2026, 3, 3, 12, 0)
-        self.assertEqual(api.exit(ticket["ticket_id"]), (200, {"charge_cents": 800}))
+    def test_one_and_a_half_hours(self):
+        g = Garage()
+        t = g.enter("AB12", T0)
+        self.assertEqual(g.amount_due(t, T0 + timedelta(minutes=90)), Decimal("6.00"))
 
 
 if __name__ == "__main__":

@@ -1,33 +1,29 @@
-# Fitness Studio Booking
+# Class Waitlist
 
-A fitness studio sells memberships and runs classes with limited spots. Members book spots; when a class is full they join a **waitlist**
-and may be promoted automatically. The repository contains the booking service.
+A fitness studio runs classes with a fixed number of spots. Members book a spot or join a waitlist; when a spot frees up, the waitlist
+moves. `studio.py` handles bookings.
 
-## Memberships
+## Members
 
-- **UNLIMITED:** book any number of classes. **PREMIUM** is UNLIMITED with waitlist priority.
-- **PACK:** a pack of class **credits**. Booking a spot uses 1 credit. Joining a waitlist uses no credit; the credit is used if and when the
-  member is promoted.
+- **UNLIMITED** members book as many classes as they like.
+- **PACK** members have class credits: booking a spot uses 1 credit; they need at least 1 credit to book or join a waitlist.
 
-## Booking and waitlist
+## Booking
 
-- If a class has space, the member is **BOOKED**; otherwise they join the waitlist (at most **10** people), unless they're a PACK member with
-  no credits left (rejected).
-- A member can hold only one place in a class (booked or waitlisted).
-- **Waitlist order:** PREMIUM members first; within each group, first come, first served.
+- If there's a free spot the member is **BOOKED**, otherwise they join the **waitlist** (max **5** people; then refused).
+- A member can't hold two places in the same class (booked or waitlisted).
 
-## Cancellation
+## Cancelling
 
-- Cancelling a booking **12 hours or more** before the class is free (PACK members get their credit back).
-- Cancelling **less than 12 hours** before: UNLIMITED/PREMIUM members pay a **$10** late fee; PACK members **forfeit the credit** (no fee).
+- Cancelling **12 hours or more** before the class starts is free; PACK members get their credit back.
+- Cancelling **less than 12 hours** before: UNLIMITED members pay a **$10.00** fee; PACK members lose the credit.
 - Leaving the waitlist is always free.
 
-## Promotion
+## Waitlist promotion
 
-When a booked spot frees up, the first eligible person on the waitlist is promoted automatically, **except in the last hour before the
-class**. A PACK member with no credits left is skipped (they stay on the waitlist). Promoted members leave the waitlist.
+When a booked member cancels, the **first person on the waitlist** (first come, first served) is booked automatically (a PACK member
+uses a credit) — **except in the last hour before the class**, when the spot is left open.
 
 ## Example
 
-Capacity 1. Ana (UNLIMITED) books. Sam (UNLIMITED) and Pia (PREMIUM) join the waitlist in that order → waitlist **Pia, Sam**.
-Ana cancels 20 h before → no fee, **Pia is promoted**.
+Capacity 1. Ana books, Ben joins the waitlist. Ana cancels 20 hours before → no fee, **Ben is booked**.

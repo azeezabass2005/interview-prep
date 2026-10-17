@@ -1,35 +1,30 @@
 import unittest
-from decimal import Decimal
 
-from robo.app import build_app
-from robo.services.planner import quantity
+from rebalance import Account, Rebalancer
 
-
-def world(weights, cash, holdings=None, restricted=(), prices=None):
-    api = build_app()
-    api.model("M", weights)
-    for symbol in set(weights) | set(holdings or {}):
-        api.price(symbol, (prices or {}).get(symbol, "100"))
-    api.open({"account_id": "A", "model": "M", "cash": cash, "holdings": holdings or {}, "restricted": list(restricted)})
-    return api.plan("A")[1]["trades"]
+HALF = {"AAA": "0.5", "BBB": "0.5"}
 
 
-class HiddenRobo(unittest.TestCase):
-    def test_B1_cash_buffer(self):
-        self.assertEqual(world({"AAA": 50, "BBB": 50}, "10000"), [["BUY", "AAA", 49], ["BUY", "BBB", 49]])
+class HiddenRebalance(unittest.TestCase):
+    def test_B1_exactly_five_points_is_inside_the_band(self):
+        r = Rebalancer({"AAA": 100, "BBB": 100})
+        self.assertEqual(r.plan(Account(0, {"AAA": 55, "BBB": 45}), HALF), [])
 
-    def test_B2_band_on_total_value(self):
-        trades = world({"CCC": 5, "DDD": 95}, "9300", {"CCC": 7})
-        self.assertNotIn("CCC", [t[1] for t in trades])
+    def test_B2_two_percent_cash_buffer(self):
+        r = Rebalancer({"AAA": 100, "BBB": 100})
+        self.assertIn(("BBB", "BUY", 29), r.plan(Account(0, {"AAA": 80, "BBB": 20}), HALF))
 
-    def test_B3_sells_before_buys(self):
-        trades = world({"ZZZ": 40, "BBB": 60}, "2000", {"ZZZ": 100, "BBB": 10}, prices={"ZZZ": "50", "BBB": "300"})
-        self.assertEqual(trades[0][0], "SELL")
-        self.assertIn(["BUY", "BBB", 9], trades)
+    def test_B3_restricted_weight_redistributed(self):
+        r = Rebalancer({"AAA": 100, "BBB": 100, "CCC": 100})
+        account = Account(8000, {"CCC": 20}, {"CCC"})
+        plan = r.plan(account, {"AAA": "0.5", "BBB": "0.25", "CCC": "0.25"})
+        self.assertIn(("AAA", "BUY", 52), plan)
 
-    def test_B4_round_toward_zero(self):
-        self.assertEqual(quantity(Decimal("3920"), Decimal("5000"), Decimal("50")), -21)
+    def test_B4_sells_round_toward_zero(self):
+        r = Rebalancer({"AAA": 30, "BBB": 100})
+        self.assertIn(("AAA", "SELL", 136), r.plan(Account(0, {"AAA": 300, "BBB": 10}), HALF))
 
-    def test_B5_restricted_weight_redistributed(self):
-        self.assertEqual(world({"AAA": 50, "BBB": 25, "CCC": 25}, "10000", restricted=["AAA"]),
-                         [["BUY", "BBB", 49], ["BUY", "CCC", 49]])
+    def test_B5_sells_before_buys(self):
+        r = Rebalancer({"AAA": 100, "BBB": 100})
+        plan = r.plan(Account(0, {"AAA": 20, "BBB": 80}), HALF)
+        self.assertEqual([side for _, side, _ in plan], ["SELL", "BUY"])

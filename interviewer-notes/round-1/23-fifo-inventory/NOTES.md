@@ -1,70 +1,62 @@
-# R1-23 · Warehouse Inventory (FIFO): Interviewer Guide
+# R1-23 · FIFO Inventory: Interviewer Guide
 
-~210 lines in `inventory/`. One passing test (shipping a whole single layer). The shared FIFO helper `services/fifo.py::take` hides
-three bugs (order, partial-layer arithmetic, and it mutates as it goes, which makes `ship` non-atomic).
+One file, `inventory.py` (~90 lines), with one passing test (a single lot). **The spec example fails on the buggy code** (B1: LIFO),
+a quick first find. The others need multi-step scenarios.
 
 ## Session plan (60 min)
-0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
+0–5 resume · 5–12 spec summary + questions · 12–17 code walk · 17–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
 | Question | Answer |
 |---|---|
-| Same received date | Creation order breaks ties. |
-| Transfer of a partial layer | Splits: the remainder stays at the source with the same date/cost. |
-| Return cost precision | 4 dp, half-up. |
-| Return warehouse | The shipment's warehouse. |
-| Transfer that fails midway | Must not happen: check stock first (already). |
+| Two lots received the same day | Order received (stable). |
+| Transfer more than available | All or nothing, like shipping. |
+| Return cost when the shipment spanned two lots | The shipment's average unit cost. |
+| On-hand exactly at the reorder point | Suggest a reorder. |
 | Negative stock | Never. |
 
 ## Code map
-| Module | Responsibility |
-|---|---|
-| `services/fifo.py` | Shared layer consumption + COGS |
-| `services/receiving.py` | Receipts |
-| `services/shipping.py` | Shipments and returns |
-| `services/transfers.py` | Inter-warehouse transfers |
-| `services/valuation.py`, `store.py`, `api.py`, `app.py` | Valuation, storage, facade, wiring |
+`lots` · `on_hand` · `value` · `receive` (sorted insert) · `_take` (FIFO consumption) · `ship` (COGS, reorder) · `transfer` · `return_goods`.
 
 ## Planted bugs (5)
 
-### B1 · Consumes newest first (LIFO)
-- **Where:** `fifo.py::take`: `reverse=True`.
-- **Test:** 100 @ 2.00 (Jan 1), 50 @ 2.50 (Jan 5); ship 50 → COGS **100.00** (buggy 125.00).
+### B1 · LIFO, not FIFO
+- **Where:** `_take`: `lots[-1]`.
+- **Test:** 5 @ 10 (Jan), 5 @ 12 (Feb), ship 3 → **COGS 30** (buggy 36).
 
-### B2 · Short shipment consumes stock before failing
-- **Where:** `shipping.py::ship`: calls `take` (which mutates layers) and only then checks for a shortfall. `transfer` correctly checks first.
-- **Test:** 10 on hand, ship 15 → 409, on-hand still **10**.
+### B2 · Partial shipment on insufficient stock
+- **Where:** `_take` consumes before discovering the shortage.
+- **Test:** 5 on hand, ship 8 → error **and still 5 on hand** (buggy 0).
 
-### B3 · Partial layer keeps the taken quantity
-- **Where:** `fifo.py::take`: `layer.qty = … else n` sets the remainder to the amount *taken*.
-- **Test:** receive 100 @ 2.00, ship 30 → valuation **140.00** (buggy 60.00).
-- **Fix:** `layer.qty -= n`.
+### B3 · Transfers reset the received date
+- **Where:** `transfer`: `Lot(..., on)` and no sort.
+- **Test:** Jan lot moved into a warehouse with a Feb lot → order **[Jan, Feb]**.
 
-### B4 · Transfers re-date layers
-- **Where:** `transfers.py::transfer`: new layers dated `on` (the transfer date) instead of the source layer's `received_on`.
-- **Test:** NJ 10 @ 1.00 (Jan 1); NY 10 @ 5.00 (Feb 1) and 10 @ 7.00 (Apr 1); transfer NJ → NY on Mar 1; ship 10 from NY → COGS **10.00**.
+### B4 · Returns at the latest cost
+- **Where:** `return_goods`.
+- **Test:** shipped at $10, newer lot at $15, return 1 → value **$115** (buggy $120).
 
-### B5 · Returns priced at the latest layer's cost
-- **Where:** `shipping.py::return_units`.
-- **Test:** 100 @ 2.00, ship 40, receive 10 @ 3.00, return 5 → unit cost **2.0000**.
-- **Fix:** `(shipment.cogs / shipment.qty).quantize(Decimal("0.0001"), ROUND_HALF_UP)`.
+### B5 · Reorder only below the point
+- **Where:** `ship`: `<`.
+- **Test:** point 3, on hand drops to exactly 3 → suggestion recorded.
 
-Hints: (1) the spec sentence; (2) "which helper do shipping and transfers share, and what does it do to the layers?"
+Hints: (1) "what's `lots[-1]` after sorting by date?"; (2) "if an error is raised half-way, what has already changed?"
 
 ## Red herrings
-- Layers keyed per (SKU, warehouse): correct isolation.
-- `transfer` pre-checks stock: correct (contrast with `ship`).
+- `receive` sorts lots by date: correct.
+- Return quantity check: correct.
 
 ## Questions about the candidate's fixes (data structures)
-- **B1/B3:** "`take` sorts the layers on every call: O(n log n). Layers mostly arrive in date order. What structure gives O(1) FIFO pops?" (A `deque` per (SKU, warehouse), popleft when empty. But transfers and back-dated returns can insert out of order → a heap keyed by (date, seq), or insort into a list.)
-- **B2:** "What's the general pattern to make `take` safe?" (Two-phase: plan the consumption without mutating, verify, then apply. Or compute availability first. Pure functions are easier to test.)
-- **Valuation:** "`on_hand` and valuation are O(layers). If a dashboard polls them constantly?" (Maintain running totals per (SKU, warehouse), updated on every movement.)
+- **Lots as a list:** "`lots.remove(lot)` and `lots[0]` consumption: O(n) each. Better?" (A `deque`: popleft O(1); lots arrive mostly in date order, so append works; out-of-order receipts need a sorted insert — `bisect.insort` with a key.)
+- **B2:** "Validate-then-mutate vs mutate-then-rollback. Which and why?" (Validate first is simpler; rollback needs a copy. In a DB: a transaction.)
+- **On-hand sum is O(lots).** "Keep a running total?" (Yes, updated in receive/take; risk of drift.)
+- **B3:** "Why does the transfer need to sort but receive also sorts?" (Duplication: one helper `_add_lot` keeps the invariant.)
 
 ## Feature requests
-1. **"Cycle counts: a stock count finds 3 units missing; write them off FIFO and report shrinkage cost."** Strong answer: reuse the two-phase take; a separate adjustment record; shrinkage report by month.
-2. **"Weighted-average costing as an option per SKU."** Strong answer: a costing strategy interface (FIFO vs average); average needs a running (qty, value) per location; transfers carry the average.
-3. **"Reservations: allocated stock for open orders can't be shipped to others."** Strong answer: available = on hand − reserved; a reservation table; atomicity of reserve and ship.
+1. **"Average-cost valuation as an alternative to FIFO, per SKU."** Strong answer: strategy per SKU; average cost recomputed on receipt; returns at average.
+2. **"Lot expiry dates: never ship expired stock (FEFO)."** Strong answer: order by expiry, not received; expired stock excluded from on-hand for shipping.
+3. **"Reserve stock for an order before shipping."** Strong answer: available = on hand − reserved; reservations expire; FIFO at ship time.
 
 ## Scoring signals
-- **Strong:** uses partial-layer scenarios early (finds B3), tests failure paths for atomicity, notices `transfer` checks first but `ship` doesn't.
-- **Weak:** only whole-layer shipments.
+- **Strong:** builds the example test; checks state after an error; reasons about lot order after transfer.
+- **Weak:** single-lot tests.

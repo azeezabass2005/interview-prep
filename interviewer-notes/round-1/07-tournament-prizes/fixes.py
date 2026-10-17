@@ -1,9 +1,7 @@
 FIXES = [
-    ("tourney/services/pool.py", "    return max(prize_side(entry_count), GUARANTEE_CENTS) - rake(entry_count)",
-     "    return max(prize_side(entry_count) - rake(entry_count), GUARANTEE_CENTS)"),
-    ("tourney/services/pool.py", "entry_count < max_entries:", "entry_count <= max_entries:"),
-    ("tourney/services/results.py", "        for player in players:\n            prizes[player] = covered[0]",
-     "        prizes.update(split_evenly(sum(covered), players))"),
-    ("tourney/services/registration.py", "if len(previous) > MAX_REENTRIES + 1:", "if len(previous) > MAX_REENTRIES:"),
-    ("tourney/services/registration.py", "t.level < LATE_REG_LAST_LEVEL", "t.level <= LATE_REG_LAST_LEVEL"),
+    ("tournament.py", "        if self.entries.count(player) > 1 + MAX_REENTRIES:", "        if self.entries.count(player) >= 1 + MAX_REENTRIES:"),
+    ("tournament.py", "TO_POOL * len(self.players)", "TO_POOL * len(self.entries)"),
+    ("tournament.py", "            if count > minimum:", "            if count >= minimum:"),
+    ("tournament.py", "            amounts[-1] += pool - sum(amounts)", "            amounts[0] += pool - sum(amounts)"),
+    ("tournament.py", "sorted(chips, key=lambda p: chips[p], reverse=True)", "sorted(chips, key=lambda p: chips[p])"),
 ]

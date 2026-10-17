@@ -1,10 +1,11 @@
 import unittest
+from decimal import Decimal
 
-from potluck.app import build_app
+from potluck import PotLuck
 
 
-class ScriptedRng:
-    def __init__(self, values):
+class Script:
+    def __init__(self, *values):
         self.values = list(values)
 
     def randint(self, low, high):
@@ -12,13 +13,13 @@ class ScriptedRng:
 
 
 class TestPotLuck(unittest.TestCase):
-    def test_buying_entries(self):
-        api, _ = build_app(rng=ScriptedRng([12345, 67890]))
-        _, body = api.register({"name": "Ann", "email": "ann@example.com"})
-        api.open_draw()
-        status, bought = api.buy(body["participant_id"], {"quantity": 2})
-        self.assertEqual(status, 201)
-        self.assertEqual([e["code"] for e in bought["entries"]], ["12345", "67890"])
+    def test_pot_includes_entries(self):
+        game = PotLuck(Script(11111, 22222, 33333, 12345))
+        game.register("ann", "ann@example.com")
+        game.open_draw()
+        game.buy("ann", 3)
+        game.close()
+        self.assertEqual(game.current.pot, Decimal("10015"))
 
 
 if __name__ == "__main__":

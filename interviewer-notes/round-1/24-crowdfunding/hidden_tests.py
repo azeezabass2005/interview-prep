@@ -1,63 +1,54 @@
 import unittest
-from datetime import datetime
+from datetime import datetime, timedelta
+from decimal import Decimal
 
-from crowd.app import build_app
-from crowd.payments import FakePayments
+from crowd import Platform
 
-
-class FakeClock:
-    def __init__(self):
-        self.current = datetime(2026, 6, 1)
-
-    def now(self):
-        return self.current
+DEADLINE = datetime(2026, 9, 30, 23, 59)
+EARLY = datetime(2026, 9, 1)
+AFTER = DEADLINE + timedelta(minutes=1)
 
 
-def campaign(deluxe_limit=50, failing=()):
-    clock = FakeClock()
-    payments = FakePayments(failing)
-    api, _ = build_app(clock, payments)
-    api.create({"id": "c", "goal": "1000", "deadline": "2026-07-01T00:00",
-                "tiers": [{"name": "STANDARD", "minimum": "35"}, {"name": "DELUXE", "minimum": "100", "limit": deluxe_limit}]})
-    return api, clock, payments
+class Gateway:
+    def __init__(self, script=None):
+        self.script = {k: list(v) for k, v in (script or {}).items()}
 
-
-def settle(api, clock):
-    clock.current = datetime(2026, 7, 1)
-    return api.settle("c")[1]
+    def charge(self, backer, amount):
+        results = self.script.get(backer)
+        return results.pop(0) if results else True
 
 
 class HiddenCrowd(unittest.TestCase):
-    def test_B1_tier_limit_exact(self):
-        api, _, _ = campaign(deluxe_limit=2)
-        api.pledge("c", {"backer": "a", "tier": "DELUXE", "amount": "100"})
-        api.pledge("c", {"backer": "b", "tier": "DELUXE", "amount": "100"})
-        self.assertEqual(api.pledge("c", {"backer": "x", "tier": "DELUXE", "amount": "100"})[0], 409)
+    def test_B1_cancel_frees_tier_slot(self):
+        p = Platform(Gateway())
+        p.create("c", 1000, DEADLINE, [("EARLY", 50, 1)])
+        p.pledge("c", "ana", 60, EARLY, "EARLY")
+        p.cancel("c", "ana", EARLY)
+        p.pledge("c", "ben", 60, EARLY, "EARLY")
+        self.assertEqual(p.campaigns["c"].tiers["EARLY"].taken, 1)
 
-    def test_B2_cancelled_pledges_ignored(self):
-        api, clock, payments = campaign()
-        api.pledge("c", {"backer": "a", "tier": "DELUXE", "amount": "900"})
-        pid = api.pledge("c", {"backer": "b", "tier": "DELUXE", "amount": "200"})[1]["pledge_id"]
-        api.cancel("c", pid)
-        self.assertFalse(settle(api, clock)["funded"])
-        self.assertEqual(payments.charges, [])
+    def test_B2_goal_exactly_met_is_funded(self):
+        p = Platform(Gateway())
+        p.create("c", 1000, DEADLINE)
+        p.pledge("c", "ana", 1000, EARLY)
+        self.assertTrue(p.settle("c", AFTER)["funded"])
 
-    def test_B3_goal_reached_exactly(self):
-        api, clock, _ = campaign()
-        api.pledge("c", {"backer": "a", "tier": "DELUXE", "amount": "1000"})
-        self.assertTrue(settle(api, clock)["funded"])
+    def test_B3_no_pledges_at_the_deadline(self):
+        p = Platform(Gateway())
+        p.create("c", 1000, DEADLINE)
+        with self.assertRaises(Exception):
+            p.pledge("c", "ana", 100, DEADLINE)
 
-    def test_B4_fee_only_for_successful_charges(self):
-        api, clock, _ = campaign(failing={"s0"})
-        for i in range(20):
-            api.pledge("c", {"backer": f"s{i}", "tier": "STANDARD", "amount": "35"})
-        for i in range(5):
-            api.pledge("c", {"backer": f"d{i}", "tier": "DELUXE", "amount": "100"})
-        result = settle(api, clock)
-        self.assertEqual((result["collected"], result["payout"]), ("1165.00", "1067.00"))
+    def test_B4_fixed_fee_only_for_successful_charges(self):
+        p = Platform(Gateway({"ben": [False, False]}))
+        p.create("c", 100, DEADLINE)
+        p.pledge("c", "ana", 100, EARLY)
+        p.pledge("c", "ben", 50, EARLY)
+        self.assertEqual(p.settle("c", AFTER)["processing_fee"], Decimal("3.20"))
 
-    def test_B5_cannot_change_into_sold_out_tier(self):
-        api, _, _ = campaign(deluxe_limit=1)
-        api.pledge("c", {"backer": "ann", "tier": "DELUXE", "amount": "100"})
-        pid = api.pledge("c", {"backer": "bob", "tier": "STANDARD", "amount": "35"})[1]["pledge_id"]
-        self.assertEqual(api.change("c", pid, {"tier": "DELUXE", "amount": "100"})[0], 409)
+    def test_B5_declined_charge_retried_once(self):
+        p = Platform(Gateway({"ana": [False, True]}))
+        p.create("c", 100, DEADLINE)
+        p.pledge("c", "ana", 100, EARLY)
+        result = p.settle("c", AFTER)
+        self.assertEqual((result["collected"], result["failed"]), (Decimal("100"), []))

@@ -1,50 +1,37 @@
 import unittest
 from datetime import datetime, timedelta
+from decimal import Decimal
 
-from rides.app import build_app
+from fares import RideService
 
-
-class FakeClock:
-    def __init__(self, now):
-        self.current = now
-
-    def now(self):
-        return self.current
-
-    def advance(self, **kw):
-        self.current += timedelta(**kw)
+T0 = datetime(2026, 4, 1, 8, 0)
 
 
-def trip(surge=None, promo=None, wait=timedelta(0), ride=timedelta(minutes=20), miles="10", tolls="0", surge_change=None):
-    clock = FakeClock(datetime(2026, 5, 1, 18, 0))
-    api, feed, _ = build_app(clock)
+def ride(km, minutes, wait_minutes=1, surge=None, promo=0, surge_later=None):
+    rides = RideService()
     if surge:
-        feed.set("midtown", surge)
-    tid = api.request({"rider": "r", "zone": "midtown", "promo": promo})[1]["trip_id"]
-    api.assign(tid, "d", 300)
-    clock.advance(minutes=3)
-    api.arrive(tid)
-    clock.current += wait
-    api.pick_up(tid)
-    if surge_change:
-        feed.set("midtown", surge_change)
-    clock.current += ride
-    return api.complete(tid, {"miles": miles, "tolls": tolls})[1]
+        rides.set_surge(surge)
+    rides.request("t1", "ana", T0, promo)
+    if surge_later:
+        rides.set_surge(surge_later)
+    rides.accept("t1", "dan", T0)
+    rides.arrive("t1", T0 + timedelta(minutes=3))
+    rides.start("t1", T0 + timedelta(minutes=3 + wait_minutes))
+    return rides.complete("t1", km, minutes)
 
 
-class HiddenRides(unittest.TestCase):
-    def test_B1_started_minute_counts(self):
-        self.assertEqual(trip(miles="5.3", ride=timedelta(minutes=14, seconds=20))["fare"], "15.36")
+class HiddenFares(unittest.TestCase):
+    def test_B1_surge_locked_at_request(self):
+        self.assertEqual(ride(10, 20, surge="1.5", surge_later="2.0")["fare"], Decimal("30.75"))
 
-    def test_B2_locked_surge(self):
-        self.assertEqual(trip(surge="1.5", surge_change="2.0")["fare"], "32.75")
+    def test_B2_minimum_after_surge(self):
+        self.assertEqual(ride(1, 2, surge="1.2")["fare"], Decimal("7.00"))
 
-    def test_B3_free_wait_minutes_not_charged(self):
-        self.assertEqual(trip(wait=timedelta(minutes=5))["fare"], "23.70")
+    def test_B3_first_two_minutes_free(self):
+        self.assertEqual(ride(10, 20, wait_minutes=5)["waiting"], Decimal("1.20"))
 
-    def test_B4_promo_excludes_tolls(self):
-        self.assertEqual(trip(promo="SPRING20", tolls="3.00")["fare"], "21.00")
+    def test_B4_discount_capped(self):
+        self.assertEqual(ride(50, 40, promo=20)["discount"], Decimal("10.00"))
 
-    def test_B5_driver_payout_excludes_booking_fee(self):
-        result = trip(surge="1.5", miles="5.3", ride=timedelta(minutes=14, seconds=20), tolls="3.00")
-        self.assertEqual(result["driver_payout"], "18.03")
+    def test_B5_payout_before_promo(self):
+        self.assertEqual(ride(50, 40, promo=20)["driver_payout"], Decimal("55.88"))

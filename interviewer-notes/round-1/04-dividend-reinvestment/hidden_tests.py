@@ -1,48 +1,40 @@
 import unittest
+from datetime import date
+from decimal import Decimal
 
-from drip.app import build_app
+from drip import DripProcessor
 
-Q1 = {"event_id": "Q1", "security": "BBG", "record_date": "2026-03-10", "pay_date": "2026-03-31",
-      "per_share": "0.82", "reinvest_price": "40.00"}
-Q2 = {"event_id": "Q2", "security": "BBG", "record_date": "2026-06-10", "pay_date": "2026-06-30",
-      "per_share": "0.82", "reinvest_price": "40.00"}
-
-
-def world(country="US", shares="100", enrol_from=None):
-    api, store = build_app()
-    api.open_account({"account_id": "A", "name": "Ann", "country": country})
-    api.record_movement({"account_id": "A", "security": "BBG", "on": "2026-01-05", "shares": shares})
-    if enrol_from:
-        api.set_enrolment({"account_id": "A", "security": "BBG", "enrolled": True, "effective_from": enrol_from})
-    api.declare(Q1)
-    return api
+REC, PAY = date(2026, 3, 10), date(2026, 3, 15)
 
 
-def pay(api, event="Q1"):
-    return api.process(event)[1]["payments"][0]
+def holder(country="US", shares=100, enrol=None):
+    d = DripProcessor()
+    d.open_account("a1", country)
+    d.trade("a1", "XYZ", date(2026, 3, 1), shares)
+    if enrol:
+        d.enrol("a1", "XYZ", enrol)
+    return d
 
 
 class HiddenDrip(unittest.TestCase):
-    def test_B1_entitlement_on_record_date(self):
-        api = world()
-        api.record_movement({"account_id": "A", "security": "BBG", "on": "2026-03-20", "shares": "50"})
-        self.assertEqual(pay(api)["gross"], "82.00")
+    def test_B1_record_date_holdings(self):
+        d = holder()
+        d.trade("a1", "XYZ", date(2026, 3, 12), 50)
+        [p] = d.pay_dividend("XYZ", "0.50", REC, PAY, "25")
+        self.assertEqual(p["gross"], Decimal("50.00"))
 
-    def test_B2_unknown_country_default_rate(self):
-        self.assertEqual(pay(world(country="BR"))["withholding"], "24.60")
+    def test_B2_other_countries_withhold_30_percent(self):
+        [p] = holder("BR").pay_dividend("XYZ", "0.50", REC, PAY, "25")
+        self.assertEqual(p["tax"], Decimal("15.00"))
 
-    def test_B3_enrolment_as_of_record_date(self):
-        api = world(enrol_from="2026-03-15")
-        p = pay(api)
-        self.assertEqual((p["cash_paid"], p["shares_bought"]), ("82.00", "0"))
+    def test_B3_shares_round_down(self):
+        [p] = holder(shares=40, enrol=date(2026, 1, 1)).pay_dividend("XYZ", "0.50", REC, PAY, "3")
+        self.assertEqual(p["shares_bought"], Decimal("6.6666"))
 
-    def test_B4_leftover_feeds_next_reinvestment(self):
-        api = world(shares="10", enrol_from="2026-01-01")
-        pay(api)
-        api.declare(Q2)
-        p = pay(api, "Q2")
-        self.assertEqual(p["shares_bought"], "0.1983")
-        self.assertEqual(float(p["leftover"]), 0.0)
+    def test_B4_leftover_cash_paid(self):
+        [p] = holder(enrol=date(2026, 1, 1)).pay_dividend("XYZ", "0.50", REC, PAY, "700")
+        self.assertEqual((p["shares_bought"], p["cash"]), (Decimal("0.0714"), Decimal("0.02")))
 
-    def test_B5_fee_cap_on_net(self):
-        self.assertEqual(pay(world(country="GB", shares="10", enrol_from="2026-01-01"))["fee"], "0.35")
+    def test_B5_enrolment_after_record_date_not_applied(self):
+        [p] = holder(enrol=date(2026, 3, 12)).pay_dividend("XYZ", "0.50", REC, PAY, "25")
+        self.assertEqual((p["shares_bought"], p["cash"]), (Decimal("0"), Decimal("50.00")))

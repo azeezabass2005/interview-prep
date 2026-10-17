@@ -1,71 +1,62 @@
-# R1-20 · Hotel Reservations: Interviewer Guide
+# R1-20 · Hotel Rates: Interviewer Guide
 
-~235 lines in `hotel/`. One passing test (a weekday 2-night quote). Pricing has a strict order of discounts; availability is a classic
-interval problem; cancellation has a time-of-day boundary.
+One file, `hotel.py` (~90 lines), with one passing test (a booking is stored). **The spec example fails on the buggy code** (B1 adds
+a night; B2 shifts the weekend), which gives a quick first lead. The test then has to be split to isolate each cause.
 
 ## Session plan (60 min)
-0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
+0–5 resume · 5–12 spec summary + questions · 12–17 code walk · 17–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
 | Question | Answer |
 |---|---|
-| "Night of Friday" | The night starting Friday (check-in date + i). |
-| Promo making the total negative | Room total floors at 0 (already). |
-| Exactly 168 / 48 hours | Inclusive (≥). |
-| Partial refund with a promo | The first night's rate + tax on it is withheld; promo not netted. |
-| Time zone | Hotel local, naive datetimes. |
-| Same-day turnover | Check-out day is free for a new arrival (half-open nights). |
+| Is Sunday night weekend? | No: Friday and Saturday nights only. |
+| 14 days exactly | ADVANCE allowed. |
+| Cancel exactly 48 h before 15:00 | Free. |
+| Long-stay discount on ADVANCE | Yes, stacks. |
+| Cancel fee for a 1-night stay | That night + tax. |
 
 ## Code map
-| Module | Responsibility |
-|---|---|
-| `services/pricing.py` | Nights, nightly rates, discounts, tax, fee |
-| `services/availability.py` | Rooms left per night, stay availability |
-| `services/reservations.py` | Book, cancel, refund |
-| `reporting.py` | Occupancy per night (correct) |
-| `store.py`, `api.py`, `app.py` | Storage, facade, wiring |
+`_nights` · `_booked` · `nightly_rate` · `price` · `book` (validation, ADVANCE rule, availability) · `cancel`.
 
 ## Planted bugs (5)
 
-### B1 · Weekend = Saturday and Sunday nights
-- **Where:** `pricing.py::nightly_rates`: `weekday() in (5, 6)`.
-- **Test:** DELUXE from Thu for 3 nights → 220, 264, 264 (the spec example: total $825.91).
-- **Fix:** `(4, 5)`.
+### B1 · Check-out day counted as a night
+- **Where:** `_nights`: `+ 1`.
+- **Test:** Wed → Fri (2 nights) → 300 × 1.12 = **$336.00**.
 
-### B2 · Availability checks only the first night
-- **Where:** `availability.py::available`: `nights(...)[0]`.
-- **Test:** both SUITEs booked for Jun 3; a Jun 2–4 SUITE request → 409 (buggy: overbooks).
-- **Fix:** `all(self.rooms_left(room_type, n) > 0 for n in nights(...))`.
+### B2 · Weekend is Saturday and Sunday
+- **Where:** `WEEKEND_NIGHTS = (5, 6)`.
+- **Test:** `nightly_rate(Friday)` = **190**, `nightly_rate(Sunday)` = **150**.
 
-### B3 · Promo applied first
-- **Where:** `pricing.py::price`: promo subtracted before the LOS and plan discounts.
-- **Test:** STANDARD Mon, 3 nights, SAVE50 → room total **377.50** (buggy 380.00). With NON_REFUNDABLE the order matters too.
-- **Fix:** subtotal → LOS → plan → promo.
+### B3 · ADVANCE needs more than 14 days
+- **Where:** `book`: `> ADVANCE_DAYS` (inside an odd `if … pass / elif` shape — worth asking about).
+- **Test:** booked exactly 14 days before → accepted.
 
-### B4 · City fee taxed
-- **Where:** `pricing.py::price`: `(room_total + city_fee) × tax`.
-- **Test:** STANDARD Mon, 1 night → **175.63**.
+### B4 · Availability only checks the first night
+- **Where:** `book`: `nights[0]`.
+- **Test:** inventory 1; A 10→12 Jun; B 9→11 Jun → refused.
 
-### B5 · Refund window measured to midnight
-- **Where:** `reservations.py::refund_for`: check-in at 00:00 instead of 15:00 (`CHECK_IN_HOUR` unused).
-- **Test:** cancel at 2026-05-28 10:00 for a Thu Jun 4 arrival (173 h before 15:00) → full refund.
+### B5 · Cancellation deadline from midnight
+- **Where:** `cancel`: `time(0, 0)`; `CHECK_IN_TIME` is unused (clue).
+- **Test:** check-in 10 Jun; cancel 8 Jun 14:00 (49 h before 15:00) → **free**.
 
-Hints: (1) the spec sentence; (2) "build the case where the two readings differ".
+Hints: (1) "what does `weekday()` return for Friday?"; (2) "find the unused constant".
 
 ## Red herrings
-- NON_REFUNDABLE refunds nothing: correct.
-- `max(..., 0)` floor on room total: correct.
+- Rounding after each step: as specified.
+- ADVANCE cancellation returns the full total: correct.
 
 ## Questions about the candidate's fixes (data structures)
-- **B2:** "`rooms_left` scans every active reservation per night: O(R) per night, O(N·R) per booking. Better?" (Per room type, a dict night → rooms sold, updated on book/cancel: O(N) per booking. Or a segment tree / Fenwick tree over dates for range-max queries.) "What's the race if two guests book the last room at once?" (Check-then-act: needs an atomic decrement per night.)
-- **Pricing:** "Discounts are applied in a hard-coded order. How would you make the order explicit and testable?" (An ordered list of pricing steps, each a function; the order lives in one place.)
-- **Reservations:** "Reservations are in a dict by id. How do you list a guest's bookings efficiently?" (A secondary index guest → ids.)
+- **`_booked` scans every reservation for each night:** O(R·N). "Better?" (Dict (room_type, night) → count, updated on book/cancel: O(N) per booking.) "Trade-off?" (Counts can drift: one place to update; cancellations must decrement.)
+- **`nights` stored as a list on each reservation:** "Why a list, and is `in` on it costly?" (O(N) membership; a set or a range check `check_in <= night < check_out` is O(1).)
+- **B4:** "`any(...)` short-circuits: complexity?" (O(N) nights × lookup.)
+- **Concurrency:** "Two bookings for the last room at once?" (Atomic check-and-increment per night; DB constraint.)
 
 ## Feature requests
-1. **"Modify dates: a guest changes a 3-night stay to 4 nights."** Strong answer: re-check availability excluding their own nights; reprice with the original plan; atomic swap (release + book); policy for price differences.
-2. **"Overbooking allowance: sell up to 105% of STANDARD rooms."** Strong answer: capacity becomes a policy per room type; walk-out handling; reporting of oversold nights.
-3. **"Dynamic pricing: +15% when a night is more than 80% sold."** Strong answer: per-night price depends on occupancy at booking time; store the quoted nightly rates on the reservation (already); tests for the threshold.
+1. **"Minimum stay of 2 nights when the stay includes a Saturday."** Strong answer: validation in `book`; message; tests with and without Saturday.
+2. **"Dynamic pricing: +20% when occupancy for a night is above 80%."** Strong answer: rate depends on current occupancy at booking time; snapshot price on the reservation; concurrency.
+3. **"Modify dates of a reservation."** Strong answer: check availability for new nights excluding the reservation's own; reprice; plan rules (ADVANCE can't change).
 
 ## Scoring signals
-- **Strong:** turns the spec example into a test (finds B1, B4); deliberately builds a multi-night overlap scenario; asks where `CHECK_IN_HOUR` is used.
-- **Weak:** only quotes, never books.
+- **Strong:** turns the example into a test, then splits it into nightly-rate and night-count tests; tests overlapping stays.
+- **Weak:** keeps patching until the example passes without understanding which bug caused what.

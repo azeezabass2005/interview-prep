@@ -1,75 +1,61 @@
-# R1-14 · Solar Net-Metering Billing: Interviewer Guide
+# R1-14 · Solar Net Metering: Interviewer Guide
 
-~220 lines in `utility/`. One passing test (a simple 30-day bill, asserting only billable kWh). State carries across bills (registers, the bank),
-so the candidate needs multi-reading scenarios.
+One file, `netmeter.py` (~95 lines), with one passing test (a 30-day month without solar). The spec example passes on the buggy code.
 
 ## Session plan (60 min)
-0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
+0–5 resume · 5–12 spec summary + questions · 12–17 code walk · 17–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
 | Question | Answer |
 |---|---|
-| Can a register roll over twice in a period? | No (physically impossible at household loads). |
-| Tier proration rounding | Down to whole kWh: 15 days → tier 1 = 250 kWh. |
-| Bank used and banked in the same period | Impossible: net is either positive or negative. |
-| True-up timing | The bill whose **end** date is in December. A period ending 2 Jan doesn't qualify. |
-| True-up after this bill's own banking | Yes: pay out what's in the bank after this bill is applied. |
-| Out-of-order readings | Rejected (already). |
+| Rounding of the prorated tier | Nearest whole kWh (250 for 15 days). |
+| Bank larger than net | Use only what's needed; the rest stays. |
+| Can the bill go below $10? | No; credit is kWh, not money. |
+| Rollover twice in one period | Impossible (would be > 100,000 kWh). |
+| True-up of an empty bank | $0.00. |
 
 ## Code map
-| Module | Responsibility |
-|---|---|
-| `services/meters.py` | Register deltas |
-| `services/tariff.py` | Tier sizes and energy charge |
-| `services/billing.py` | Period maths, banking, charges, true-up |
-| `reporting.py` | Annual statement (correct) |
-| `store.py`, `api.py`, `app.py` | Storage, facade, wiring |
+`_usage` · `read` (baseline, validation) · `_bill` (net, bank, tiers) · `true_up`.
 
 ## Planted bugs (5)
 
-### B1 · Register rollover ignored
-- **Where:** `meters.py::register_delta`: returns `current − previous` (negative after a rollover).
-- **Test:** import 99,900 → 300 → **400 kWh** imported.
-- **Fix:** `(current - previous) % REGISTER_MAX`.
-- **Hints:** (1) "What does the spec say about 5-digit registers?" (2) "Read 99,900, then 300."
+### B1 · Register rollover
+- **Where:** `_usage`; `ROLLOVER` is used only for validation.
+- **Test:** 99,900 → 100 → 200 kWh → **$40.00**.
 
-### B2 · Tiers not scaled to the period length
-- **Where:** `tariff.py::tier_sizes`: ignores `days`.
-- **Test:** 15-day period, 400 kWh → 250 × 0.12 + 150 × 0.15 = **$52.50** energy (buggy $48.00).
-- **Fix:** `size * days // 30`.
-- **Hints:** "Bill a short period."
+### B2 · Tier not prorated
+- **Where:** `_bill`: `threshold = TIER_KWH`; `days` and `TIER_DAYS` unused (clue).
+- **Test:** 15 days, 400 kWh → 250 × 0.15 + 150 × 0.20 + 10 = **$77.50** (buggy $70.00).
 
-### B3 · Banked kWh are never used up
-- **Where:** `billing.py::read`: computes `used` but never subtracts it from `account.bank_kwh`.
-- **Test:** surplus 150 → next month 400 net bills 250 → the month after, 300 net bills **300** (buggy 150).
-- **Fix:** `account.bank_kwh -= used`.
-- **Hints:** "Check the bank after it's been used."
+### B3 · Bank never decreases
+- **Where:** `_bill`: computes `banked_used` but doesn't subtract it.
+- **Test:** bank 100; use 60, then 60 more → second bill charges 20 kWh → **$13.00** (buggy $10.00).
 
-### B4 · Service charge is taxed
-- **Where:** `billing.py::read`: `(energy + service) × 5%`.
-- **Test:** the spec example → **$90.75** (buggy $91.35).
-- **Fix:** `energy × TAX_RATE`.
+### B4 · True-up doesn't reset the bank
+- **Where:** `true_up`.
+- **Test:** after a true-up the bank is 0.
 
-### B5 · True-up keyed on the period start
-- **Where:** `billing.py::read`: `previous.read_on.month` instead of `reading.read_on.month`.
-- **Test:** period Nov 15 → Dec 15 with 200 kWh banked → payout **$8.00**, bank 0.
-- **Fix:** use the new reading's month.
+### B5 · Banks all exports, not the excess
+- **Where:** `_bill`: `bank += exported`.
+- **Test:** import 300, export 500 → bank **200** (buggy 500).
+
+Hints: (1) "which inputs does `_bill` receive and never use?"; (2) "run three months in a row".
 
 ## Red herrings
-- Register range validation: correct.
-- Rounding each component with `cents`: per spec.
+- Readings must move forward: correct.
+- Rounding the energy charge once: correct.
 
 ## Questions about the candidate's fixes (data structures)
-- **B1:** "Why is modulo the right abstraction for rollover? What would break if a meter could roll over twice?" (You can't detect it from two readings; you'd need a max-plausible-usage check.)
-- **B3:** "The bank is one integer per account. When would you need a ledger of bank movements instead?" (Audits, disputes, re-billing corrected readings: an append-only ledger lets you replay.)
-- **Readings:** "`readings` is an append-only list; bills only need the last one. Memory over 20 years? Alternatives?" (Keep the last reading in the account and archive the rest.)
-- **Reporting:** "The annual statement scans all bills: O(bills). Index by year?" (A dict year → bills, or bills sorted by end date + bisect.)
+- **B1:** "Why does `% ROLLOVER` work for both normal and rolled cases?" (Modular arithmetic; fails if usage ≥ 100,000 in one period.)
+- **Bills list:** "Find a customer's last 12 bills: O(all bills). Better?" (Per-customer list or deque(maxlen=12).)
+- **Bank as int kWh.** "If credits had to expire after 12 months, what would you store?" (FIFO lots with dates in a deque; consume oldest first.)
+- **Accounts via `setdefault`.** "What's the risk?" (A typo creates a new customer silently; explicit registration is safer.)
 
 ## Feature requests
-1. **"Estimated reads: if a reading is missing, bill using the average daily usage of the last 3 bills, then true it up at the next actual read."** Strong answer: an estimated flag on the bill; the next actual reading bills the difference (actual delta − estimated usage); never negative billing without a credit line.
-2. **"Time-of-use pricing: peak 16:00–21:00 at $0.30, off-peak $0.10, from smart meter interval data."** Strong answer: interval data model (15-minute buckets); banking per period type (ask PM); tier logic replaced.
-3. **"Corrected reading: an earlier reading was mistyped; re-bill all affected periods."** Strong answer: bills are derived from readings; recompute from the corrected point forward, including the bank; issue adjustment bills instead of editing old ones.
+1. **"Time-of-use rates: peak (16:00–21:00) vs off-peak."** Strong answer: interval data or separate registers; bank valued per period; rates as data.
+2. **"Bank credits expire after 12 months."** Strong answer: dated lots (deque), FIFO consumption, expiry on each bill.
+3. **"Estimated reading when the meter can't be read."** Strong answer: estimate from history; mark as estimated; correct on the next actual reading.
 
 ## Scoring signals
-- **Strong:** writes a reusable helper `bill_sequence([...readings])`; tests rollover, short periods, the bank across 3 periods and December.
-- **Weak:** only single-period bills.
+- **Strong:** chains several readings; notices the unused `days`; asks about rollover.
+- **Weak:** single-period tests only.

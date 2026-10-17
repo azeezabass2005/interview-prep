@@ -1,17 +1,25 @@
 import unittest
+from datetime import datetime
+from decimal import Decimal
 
-from margin.app import build_app
+from margin import MarginEngine
+
+NOW = datetime(2026, 5, 4, 15, 0)
+
+
+class Clock:
+    def __init__(self, now):
+        self.current = now
+
+    def now(self):
+        return self.current
 
 
 class TestMargin(unittest.TestCase):
-    def test_well_collateralised(self):
-        api = build_app()
-        api.add_security("TLT", "BOND")
-        api.price("TLT", "2026-06-01", "100")
-        api.open_account("A", "-1000", {"TLT": 100})
-        status, body = api.run("A", "2026-06-01")
-        self.assertEqual(status, 200)
-        self.assertIsNone(body["call"])
+    def test_cash_only_account(self):
+        engine = MarginEngine(Clock(NOW))
+        engine.open_account("a1", 5000)
+        self.assertEqual(engine.evaluate("a1")["excess"], Decimal("5000"))
 
 
 if __name__ == "__main__":

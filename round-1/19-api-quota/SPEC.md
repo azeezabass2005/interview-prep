@@ -1,31 +1,28 @@
-# Market Data API Metering
+# API Quota
 
-A market-data API rate-limits each client with a **token bucket** and meters usage for **monthly billing**. The repository contains the
-limiter, the usage meter and the invoicing logic.
+A market-data company sells API access. Every API key is on a plan that limits **bursts** (with a token bucket) and **monthly volume**.
+`quota.py` decides whether a request is allowed and produces monthly invoices.
 
 ## Plans
 
-| Plan | Bucket capacity | Refill (tokens/s) | Monthly allowance (units) | Monthly fee | Beyond allowance |
-|---|---|---|---|---|---|
-| FREE | 10 | 1 | 10,000 | $0 | requests rejected |
-| PRO | 100 | 20 | 1,000,000 | $500 | **$0.001 per unit** of overage |
+| Plan | Bucket capacity | Refill (tokens/s) | Monthly units | Price |
+|---|---|---|---|---|
+| FREE | 10 | 5 | 1,000, **hard limit** | $0 |
+| PRO | 50 | 20 | 100,000 included | $49.00 + **$0.002 per unit above 100,000** |
 
-Endpoints cost tokens and units: `/quote` 1, `/history` 5, `/bulk` 20.
+## Requests
 
-## Rate limiting
+- A request has a **cost** in units (1 for a quote, N for a batch of N symbols). It needs `cost` tokens.
+- **Token bucket:** a new key starts with a full bucket. Tokens refill continuously at the plan's rate and never exceed capacity.
+- If there aren't enough tokens, the request is rejected with **429** and nothing changes (no tokens taken, no usage counted).
+- **FREE keys:** a request that would take the month's usage **above 1,000 units** is rejected with **429**.
+- Allowed requests return **200** and add their cost to the key's usage for the **calendar month (UTC)**. Usage starts from zero every month.
+- Unknown keys get **403**.
 
-- A bucket starts **full** and refills **continuously** (fractions count), never above capacity.
-- A request is **allowed** if the bucket holds at least its cost, which is then removed. A **rejected** request costs nothing.
-- A rejection includes `retry_after`: seconds until enough tokens exist, **rounded up to the next 0.1 s**. If the cost exceeds the
-  capacity, `retry_after` is `None`.
-- A plan change takes effect immediately; tokens carry over but are capped at the new capacity.
+## Invoices
 
-## Metering and invoices
-
-- Every **allowed** request adds its cost to the client's usage for the current calendar month (UTC). Rejected requests are not metered.
-- FREE clients whose usage would exceed the allowance are rejected (with `retry_after = None`).
-- Invoice for a month = monthly fee + overage units × price (rounded half-up to the cent), where overage units = usage − allowance (never negative).
+For a month: FREE $0.00; PRO $49.00 + overage units × $0.002, rounded to the cent.
 
 ## Example
 
-FREE client at t = 0: `/history` → allowed (5 tokens left), `/history` → allowed (0 left). At t = 0.5: `/quote` → rejected, `retry_after = 0.5`.
+FREE key at 12:00:00: cost 8 → 200 (2 tokens left). At 12:00:01 (7 tokens): cost 6 → 200.

@@ -1,38 +1,28 @@
-# Hotel Reservations
+# Hotel Rates
 
-A boutique hotel sells rooms through its own website. The service checks availability per night, prices stays under two rate plans,
-books reservations and handles cancellations. The repository contains it.
+A hotel's reservation system checks availability, prices stays and handles cancellations. `hotel.py` holds the logic.
 
-## Inventory
+## Stays and availability
 
-Room types and counts: STANDARD (10 rooms, $150/night), DELUXE (5, $220), SUITE (2, $400). A stay of N nights needs one room of the
-type available on **every** night of the stay. A reservation holds one room per night from check-in up to (not including) check-out.
+- A stay from check-in date to check-out date covers the **nights** check-in … check-out − 1 (check-out day itself isn't a night).
+- Each room type has an inventory (e.g. KING 5). A reservation is possible only if **every night** of the stay has a room of that type free.
 
-## Pricing (per reservation)
+## Rate plans
 
-1. **Nightly rate:** base rate; nights of **Friday and Saturday** cost **20% more**.
-2. **Length-of-stay discount** on the room subtotal: 3–6 nights **5%**, 7+ nights **15%**.
-3. **Rate plan:** FLEXIBLE (no change) or NON_REFUNDABLE (**10% off**, applied after the length-of-stay discount).
-4. **Promo code** `SAVE50`: **$50 off**, applied **last** (after the rate-plan discount).
-5. **Occupancy tax 14.75%** on the discounted room total. **City fee $3.50 per night**, not taxed.
-Each amount is rounded half-up to the cent when computed.
+- **BAR** (best available rate): **$150** per night, **$190 on Friday and Saturday nights**.
+- **ADVANCE:** 15% off BAR, only if booked **at least 14 days** before the check-in date; **non-refundable**.
+
+## Price
+
+Room total = sum of nightly rates (after the plan discount). Stays of **7 nights or more** get **10% off** the room total. Then
+**12% tax**. Every step is rounded to the cent.
 
 ## Cancellation
 
-Check-in time is **15:00** hotel time on the arrival date.
-- NON_REFUNDABLE: no refund.
-- FLEXIBLE: **168 hours or more** before check-in → full refund; **48–168 hours** → refund everything except the first night
-  (its nightly rate plus tax on it); **less than 48 hours** → no refund.
-Cancelled reservations release their rooms.
-
-## Data model
-
-| Entity | Fields |
-|---|---|
-| Room type | code, rooms, base rate |
-| Reservation | id, guest, room type, check-in, check-out, plan, promo, nightly rates, totals, status |
+- Check-in time is **15:00** on the check-in date.
+- BAR: free until **48 hours before check-in time**; after that, the fee is the **first night's rate plus tax**.
+- ADVANCE: no refund (the fee is the full price).
 
 ## Example
 
-DELUXE, FLEXIBLE, arriving Thu 2026-06-04 for 3 nights (Thu, Fri, Sat): 220 + 264 + 264 = 748.00 → 5% → 710.60 → tax 104.81 →
-city fee 10.50 → **$825.91**.
+BAR, Monday 8 June → Monday 15 June 2026 (7 nights): 5 × 150 + 2 × 190 = 1,130.00 → 7-night discount → 1,017.00 → tax → **$1,139.04**.

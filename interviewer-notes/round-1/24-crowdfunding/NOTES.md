@@ -1,69 +1,62 @@
-# R1-24 · All-or-Nothing Crowdfunding: Interviewer Guide
+# R1-24 · Crowdfunding: Interviewer Guide
 
-~250 lines in `crowd/`. One passing test (an unfunded campaign charges nobody). Bugs: tier inventory (two different paths), lifecycle
-state ignored at settlement, a threshold boundary, and fee accounting with failed charges.
+One file, `crowd.py` (~110 lines), with one passing test (pledges add up). The spec example passes on the buggy code (every charge
+succeeds; the total is above the goal).
 
 ## Session plan (60 min)
-0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
+0–5 resume · 5–12 spec summary + questions · 12–17 code walk · 17–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
 | Question | Answer |
 |---|---|
-| Goal reached exactly | Funded ("at least"). |
-| Funded test uses pledged or collected? | Pledged (active pledges at the deadline). Failures don't un-fund it. |
-| Per-charge fee for failed charges | No: only successful charges. |
-| Changing to the same tier | Allowed even if it's full (you already hold a slot). |
-| Pledge exactly at the deadline | Rejected (must be before). |
-| Stretch goal base | Active pledges at the deadline (same as the funding test). |
+| Pledge at exactly the deadline | Rejected. |
+| Total exactly equal to the goal | Funded. |
+| Funded on pledges, but charges fail and collected < goal | Still funded; the creator gets what was collected. |
+| Change tier to a full tier | Rejected; the old pledge stays. |
+| How many retries? | One retry (two attempts in total). |
 
 ## Code map
-| Module | Responsibility |
-|---|---|
-| `services/campaigns.py` | Create campaigns and tiers |
-| `services/pledges.py` | Pledge, change, cancel; tier limits |
-| `services/settlement.py` | Funding decision, charging, fees, stretch goal |
-| `payments.py` | Fake card processor (configurable failures) |
-| `store.py`, `api.py`, `app.py` | Storage, facade, wiring |
+`create` · `_open` (deadline) · `_claim` (tier rules) · `pledge` · `change` · `cancel` · `total` · `settle` (charges, retries, fees).
 
 ## Planted bugs (5)
 
-### B1 · Tier limit allows one extra
-- **Where:** `pledges.py::pledge`: `claimed > limit`.
-- **Test:** DELUXE limit 2 → the third DELUXE pledge is rejected (409).
+### B1 · Tier slots never freed
+- **Where:** `cancel` and `change`.
+- **Test:** 1-slot tier; ana takes it and cancels; ben takes it → taken = **1** (buggy: ben refused).
 
-### B2 · Cancelled pledges are charged
-- **Where:** `settlement.py::settle`: `pledges = list(c.pledges.values())`.
-- **Test:** pledges 900 + 200 (cancelled), goal 1,000 → not funded; and in a funded campaign the cancelled backer is never charged.
-- **Fix:** active pledges only.
+### B2 · Goal exactly met isn't funded
+- **Where:** `settle`: `<= c.goal`.
+- **Test:** goal $1,000, pledged $1,000 → funded.
 
-### B3 · Exactly at goal isn't funded
-- **Where:** `settlement.py::settle`: `total > c.goal`.
-- **Test:** one $1,000 pledge on a $1,000 goal → funded.
+### B3 · Pledges accepted at the deadline
+- **Where:** `_open`: `at > deadline`.
+- **Test:** pledge at exactly the deadline → error.
 
-### B4 · Per-charge fee includes failed charges
-- **Where:** `settlement.py::settle`: `PER_CHARGE_FEE × attempted`.
-- **Test:** the spec example with one STANDARD charge failing → collected 1,165.00; processing 34.95 + 24 × 0.20 = 39.75 → payout **1,067.00**.
+### B4 · Fixed fee charged for failed pledges
+- **Where:** `settle`: `PROCESSING_FIXED * len(c.pledges)`.
+- **Test:** one success ($100), one double decline → processing **$3.20** (buggy $3.40).
 
-### B5 · Changing into a sold-out tier
-- **Where:** `pledges.py::change`: validates the minimum but not the target tier's limit.
-- **Test:** DELUXE limit 1 taken by ann; bob changes his STANDARD pledge to DELUXE → 409.
+### B5 · No retry
+- **Where:** `settle`.
+- **Test:** decline then success → collected $100, no failures.
 
-Hints: (1) the spec sentence; (2) "is the same rule enforced on every path that can violate it?" (B1/B5).
+Hints: (1) "what happens to `taken` when a pledge goes away?"; (2) "write a fake gateway that declines".
 
 ## Red herrings
-- Pledge/cancel/change rejected after the deadline: correct.
-- Fees rounded half-up: correct.
+- Settlement only after the deadline: correct.
+- Platform fee on collected (not pledged): correct.
 
 ## Questions about the candidate's fixes (data structures)
-- **B1/B5:** "`claimed` scans all pledges per check: O(P). How would you make tier counting O(1)?" (A counter per tier updated on pledge/change/cancel. Every mutation path must update it, which is exactly the B5 lesson.)
-- **Concurrency:** "Two backers grab the last DELUXE slot at once on two servers. What breaks, and where would you enforce the limit?" (A conditional update / DB constraint on the tier count.)
-- **Settlement:** "Charging is sequential. 50,000 backers? Partial failure mid-way? Idempotency?" (Batch + retries; a charge id per pledge so a re-run doesn't double-charge.)
+- **B1:** "`taken` is a counter that must mirror the pledges. Alternative?" (Derive it: count pledges with that tier — O(P) but never drifts; or keep a set of backers per tier.) Discuss trade-offs.
+- **Pledges dict keyed by backer:** "Why does that enforce 'one pledge per backer'?" (Key uniqueness.) "Pledge history?" (Append-only list of changes for audit.)
+- **Retries:** "Your retry is inline. In production?" (A queue with backoff; idempotency keys so a retry never double-charges.)
+- **Settlement of 100,000 pledges:** "What would you change?" (Batch, resume after crash — per-pledge charge status persisted.)
 
 ## Feature requests
-1. **"Add-ons: backers can add a $20 sticker pack to any tier pledge (limited to 200 packs)."** Strong answer: add-on inventory separate from tiers; change/cancel must release add-ons; amount = tier + add-ons.
-2. **"Retry failed charges for 7 days after the deadline; payout only after retries finish."** Strong answer: charge state machine (PENDING → CHARGED/FAILED → RETRYING); the fee computation moves to final settlement.
-3. **"Late pledges ('slacker backers') after a successful campaign, charged immediately."** Strong answer: a different flow (no all-or-nothing); fees per pledge; tier limits still enforced.
+1. **"Stretch goals: unlock bonus rewards at 150% and 200%."** Strong answer: thresholds evaluated at settlement; announced live; tests at exact thresholds.
+2. **"Add-ons: buy extra items with a pledge."** Strong answer: line items; inventory per add-on; total pledge = base + add-ons.
+3. **"Refund window after settlement."** Strong answer: refunds reduce payout before it's sent; fee policy on refunds.
 
 ## Scoring signals
-- **Strong:** looks for every code path that touches tier capacity; uses the fake payments to inject failures.
-- **Weak:** never cancels or changes a pledge.
+- **Strong:** writes a scripted gateway double; tests the deadline and goal boundaries; checks tier counts after cancel.
+- **Weak:** only the happy path.

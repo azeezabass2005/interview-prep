@@ -1,30 +1,11 @@
 FIXES = [
-    ("robo/services/targets.py", "    return {s: w for s, w in model.weights.items() if s not in restricted}",
-     "    kept = {s: w for s, w in model.weights.items() if s not in restricted}\n"
-     "    total = sum(kept.values(), Decimal(0))\n"
-     "    return {s: w / total for s, w in kept.items()} if total else {}"),
-    ("robo/services/targets.py", "    investable = total_value(account, prices)\n", "    investable = total_value(account, prices) * (1 - CASH_BUFFER)\n"),
-    ("robo/services/planner.py", "    return math.floor((target - current) / price)", "    return int((target - current) / price)"),
-    ("robo/services/planner.py",
-     """    for symbol, target in sorted(target_values(account, model, prices).items()):
-        price = prices.get(symbol)
-        current = account.holdings.get(symbol, 0) * price
-        diff = target - current
-        restricted = symbol in account.restricted
-        if not restricted and abs(diff) <= BAND * target:
-            continue
-""",
-     """    candidates = []
-    for symbol, target in sorted(target_values(account, model, prices).items()):
-        price = prices.get(symbol)
-        current = account.holdings.get(symbol, 0) * price
-        diff = target - current
-        restricted = symbol in account.restricted
-        if not restricted and abs(diff) <= BAND * total:
-            continue
-        candidates.append((symbol, target, price, current, diff))
-    sells = [c for c in candidates if c[4] < 0]
-    buys = sorted((c for c in candidates if c[4] > 0), key=lambda c: (-c[4], c[0]))
-    for symbol, target, price, current, diff in sells + buys:
-"""),
+    ("rebalance.py", "        if self.drift(account, model) < DRIFT_BAND:", "        if self.drift(account, model) <= DRIFT_BAND:"),
+    ("rebalance.py", "        investable = self.total(account) - restricted_value\n",
+     "        investable = (self.total(account) - restricted_value) * (1 - CASH_BUFFER)\n"),
+    ("rebalance.py", "        weights = {t: w for t, w in model.items() if t not in account.restricted}\n",
+     "        weights = {t: w for t, w in model.items() if t not in account.restricted}\n"
+     "        scale = sum(weights.values())\n"
+     "        weights = {t: w / scale for t, w in weights.items()}\n"),
+    ("rebalance.py", "            shares = math.floor(diff / self.prices[ticker])", "            shares = int(diff / self.prices[ticker])"),
+    ("rebalance.py", "        return trades", "        return sorted(trades, key=lambda t: (t[1] != \"SELL\", t[0]))"),
 ]

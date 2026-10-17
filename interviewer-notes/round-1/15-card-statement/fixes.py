@@ -1,7 +1,10 @@
 FIXES = [
-    ("card/services/posting.py", "PAYMENT_ORDER = sorted(APR, key=APR.get)", "PAYMENT_ORDER = sorted(APR, key=APR.get, reverse=True)"),
-    ("card/services/posting.py", "    return min(amount * CASH_FEE_RATE, CASH_FEE_MIN)", "    return max(amount * CASH_FEE_RATE, CASH_FEE_MIN)"),
-    ("card/services/cycle.py", "start <= t.posted_on < end)", "start <= t.posted_on <= end)"),
-    ("card/services/cycle.py", "            if grace:\n", "            if grace and bucket == \"purchase\":\n"),
-    ("card/services/cycle.py", "cents(daily_sum[bucket] / 30 * apr", "cents(daily_sum[bucket] / days * apr"),
+    ("statement.py", "        amount = self._record(on, \"cash\", amount)\n        return money(min(amount * CASH_FEE_PCT, CASH_FEE_MIN))",
+     "        amount = self._record(on, \"cash\", amount)\n        return money(max(amount * CASH_FEE_PCT, CASH_FEE_MIN))"),
+    ("statement.py", "            self.balances[\"cash\"] += amount + money(min(amount * CASH_FEE_PCT, CASH_FEE_MIN))",
+     "            self.balances[\"cash\"] += amount + money(max(amount * CASH_FEE_PCT, CASH_FEE_MIN))"),
+    ("statement.py", "PAYMENT_ORDER = (\"purchase\", \"cash\")", "PAYMENT_ORDER = (\"cash\", \"purchase\")"),
+    ("statement.py", "paid_by_due > previous[\"balance\"]", "paid_by_due >= previous[\"balance\"]"),
+    ("statement.py", "        for offset in range((end - start).days):", "        for offset in range((end - start).days + 1):"),
+    ("statement.py", "        elif balance < MIN_PAYMENT:\n            minimum = MIN_PAYMENT", "        elif balance < MIN_PAYMENT:\n            minimum = balance"),
 ]

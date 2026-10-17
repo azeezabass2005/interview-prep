@@ -1,74 +1,62 @@
-# R1-13 · Weekly Payroll Run: Interviewer Guide
+# R1-13 · Payroll Overtime: Interviewer Guide
 
-~230 lines in `payroll/`. One passing test (a single 8-hour day). Every spec example is untested; two of them fail on the buggy code.
+One file, `payroll.py` (~80 lines), with one passing test (a 4-hour shift). The spec example passes on the buggy code: no day has
+daily overtime, so the weekly bug stays hidden.
 
 ## Session plan (60 min)
-0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
+0–5 resume · 5–12 spec summary + questions · 12–17 code walk · 17–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
 | Question | Answer |
 |---|---|
-| Exactly 6 hours without a break | No deduction ("longer than 6 hours"). |
-| Meal deduction and overtime | Overtime is computed on hours **after** the deduction. |
-| Overnight shift | Belongs to the start day for hours, rate and overtime. |
-| Rate change mid-shift | The start day's rate for the whole shift. |
-| Weekly OT allocation | From the latest days backwards, at those days' rates. |
-| Week boundaries | Mon 00:00 – Sun 23:59 by shift **start**. |
-| Overlapping shifts | Rejected (already). |
+| Exactly 6 hours | No break deducted. |
+| Two shifts on one day | Hours add up for the daily rules; each shift gets its own break check. |
+| Shift crossing Sunday→Monday | Belongs to Sunday's week. |
+| Rate changes mid-week | Each day uses its own rate. |
+| Weekly OT on a day with daily OT | Only that day's regular hours can convert. |
 
 ## Code map
-| Module | Responsibility |
-|---|---|
-| `services/timesheets.py` | Record shifts (validation), hours per day (meal break, attribution) |
-| `services/rates.py` | Rate effective on a date |
-| `services/overtime.py` | Daily split, weekly conversion |
-| `services/paystub.py` | Gross, withholding, net |
-| `store.py`, `api.py`, `app.py` | Storage, facade, wiring |
+`set_rate` / `rate_on` · `add_shift` (overlap) · `_hours` (break) · `week` (daily split → weekly conversion → pay).
 
 ## Planted bugs (5)
 
-### B1 · 1.5× hours overlap with 2× hours
-- **Where:** `overtime.py::split_day`: `overtime = hours − 8`, so hours over 12 are counted in both buckets.
-- **Test:** one 14-hour day (break recorded) → **$360.00** (buggy $420.00).
-- **Fix:** `min(hours, 12) − 8` (floored at 0).
+### B1 · Break deducted from a 6-hour shift
+- **Where:** `_hours`: `>=`.
+- **Test:** 09:00–15:00 → **$120.00** (buggy $110.00).
 
-### B2 · Weekly overtime based on total hours
-- **Where:** `overtime.py::classify`: `excess = total_hours − 40` instead of `Σ regular − 40`.
-- **Test:** Mon–Fri 10 h → **$1,100.00** (buggy $1,200.00). Mon–Sat 8 h → $1,040.00 (unaffected: a control).
-- **Fix:** `excess = max(sum(row[1]) − 40, 0)`.
+### B2 · No double time
+- **Where:** `week`: everything above 8 is overtime; `DAILY_DOUBLE` and `DOUBLE` unused in the split (clue).
+- **Test:** 06:00–20:00 (13.5 h) → 8 × 20 + 4 × 30 + 1.5 × 40 = **$340.00** (buggy $325.00).
 
-### B3 · Overnight shift attributed to the end day
-- **Where:** `timesheets.py::week`: `hours[shift.end.date()]`.
-- **Test:** Mon 20:00–Tue 06:00 + Tue 08:00–16:00 (breaks recorded) → **$380.00** (Mon has 2 OT hours).
-- **Fix:** `shift.start.date()`.
+### B3 · Daily overtime counted toward the 40
+- **Where:** `weekly_hours += hours`.
+- **Test:** five 10-hour days → 40 regular + 10 OT = **$1,100.00** (buggy $1,180.00).
 
-### B4 · Meal break deducted from exactly-6-hour shifts
-- **Where:** `timesheets.py::shift_hours`: `hours >= 6`.
-- **Test:** a 6-hour shift without a break → 6.00 hours, $120.00 (buggy 5.5 hours).
-- **Fix:** `>`.
+### B4 · Latest rate used for every shift
+- **Where:** `rate_on` ignores `day` (clue).
+- **Test:** rate rises the following week → this week still **$160.00**.
 
-### B5 · Shifts paid at the latest rate, not the rate in effect
-- **Where:** `rates.py::rate_on`: computes `applicable` but returns the max over **all** changes, including future ones.
-- **Test:** $20 from Jan, $25 effective Wed; 8-hour shifts Mon and Wed → **$360.00** (buggy $400.00).
-- **Fix:** `max(applicable, key=…)`.
+### B5 · Night shift counted on its end date
+- **Where:** `week`: `s.end.date()`.
+- **Test:** Mon 20:00–Tue 02:00 + Tue 08:00–16:30 → 6 h + 8 h, no OT → **$280.00**.
 
-Hint ladder for every bug: (1) point at the spec sentence; (2) ask which line implements it.
+Hints: (1) "which constants are never used?"; (2) "what's special about a shift that crosses midnight?"
 
 ## Red herrings
-- Overlap validation in `record`: correct.
-- Weekly conversion iterating `reversed(rows)` (latest days first): correct.
+- The overlap check: correct.
+- Rounding once at the end: as specified.
 
 ## Questions about the candidate's fixes (data structures)
-- **B5:** "Rates are a list scanned per day. With years of history, how would you find the rate on a date?" (Keep rate changes sorted by effective date; `bisect_right` → O(log n). Inserting out of order needs `insort`.)
-- **B3:** "Shifts per worker are a flat list; `week()` scans all of them: O(all shifts ever). Better?" (Index by week start (dict week → list), or keep sorted by start and bisect the week window.)
-- **B2:** "`classify` mutates rows in place as lists. Why might an immutable result (new tuples) be safer?" (No aliasing bugs; easier to test.)
-- **Overlap check:** "Recording a shift is O(n) per insert because of the overlap check. Improve?" (Sorted list of intervals + bisect neighbours → O(log n) check.)
+- **`week` scans every shift of every employee:** O(S) per employee → O(E·S) per run. "Better?" (Group shifts by employee once; or index by (employee, week).)
+- **`add_shift` overlap check is O(S).** "Alternative?" (Per-employee shifts sorted by start; `bisect` neighbours: O(log n).)
+- **B4:** "Rates sorted by effective date + `bisect_right` → O(log n). What if rates are added out of order?" (`insort`.)
+- **`defaultdict(Decimal)`** — "Why defaultdict, and what's the gotcha?" (Reading a missing key inserts it.)
 
 ## Feature requests
-1. **"Seventh-day rule: working all 7 days pays the 7th day's first 8 hours at 1.5× and the rest at 2×."** Strong answer: detect 7 worked days in `classify`; those hours aren't regular for the weekly 40; order of rules documented.
-2. **"Holiday pay: hours on public holidays at 1.5× and not counted toward the weekly 40."** Strong answer: holiday calendar injected; precedence vs daily OT (ask PM: max of the two, not stacked).
-3. **"Retro pay: a rate increase is entered late with a past effective date; pay the difference on the next stub."** Strong answer: recompute past weeks with new rates; diff vs paid amounts; store issued stubs immutably.
+1. **"Sunday premium: all Sunday hours at least 1.5×."** Strong answer: interaction with weekly OT (don't double-premium); ordering rules; tests.
+2. **"Different overtime rules per state."** Strong answer: rule set as data per employee location; strategy object.
+3. **"Split a shift's pay when the rate changes at midnight mid-shift."** Strong answer: per-hour or per-segment rating; ask whether the spec rule (start day) should change.
 
 ## Scoring signals
-- **Strong:** all three spec examples as tests first; spots `applicable` computed but unused; tests both sides of 6 h.
-- **Weak:** tests only one-day weeks.
+- **Strong:** builds a 5-day week with daily OT (B3); tests exactly 6 hours; asks about midnight.
+- **Weak:** tests single short shifts only.

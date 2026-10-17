@@ -64,7 +64,7 @@ def cmd_start(rnd, key=None):
     git(dest, "init", "-q")
     git(dest, "add", "-A")
     git(dest, "-c", "user.name=mock", "-c", "user.email=mock@local", "commit", "-qm", "starting point")
-    brief = "SPEC.md" if rnd == "1" else "README.md and tickets/"
+    brief = "SPEC.md" if os.path.exists(os.path.join(dest, "SPEC.md")) else "README.md and tickets/"
     print(f"""
 Session ready: {dest}
 
@@ -141,7 +141,7 @@ def cmd_pm(session):
     sections = text.split("\n## ")
     pm = [sec for sec in sections if "PM" in sec.splitlines()[0]]
     if not pm:
-        print("No PM sheet for this exercise: round 2 tickets and the README are the spec.\n"
+        print("No PM sheet for this exercise: the tickets and the README are the spec.\n"
               "Say your question out loud, state your assumption, and write a test that makes it explicit.")
         return
     print("## " + pm[0].strip())

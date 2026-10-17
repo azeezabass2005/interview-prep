@@ -1,17 +1,12 @@
 FIXES = [
-    ("crowd/services/pledges.py", "if limit is not None and self.claimed(c, tier) > limit:", "if limit is not None and self.claimed(c, tier) >= limit:"),
-    ("crowd/services/pledges.py", "        p.amount = self._validate(c, tier, amount)\n",
-     "        amount = self._validate(c, tier, amount)\n"
-     "        limit = c.tiers[tier].limit\n"
-     "        if tier != p.tier and limit is not None and self.claimed(c, tier) >= limit:\n"
-     "            raise Rejected(f\"{tier} is sold out\")\n"
-     "        p.amount = amount\n"),
-    ("crowd/services/settlement.py", "        pledges = list(c.pledges.values())", "        pledges = [p for p in c.pledges.values() if p.status == ACTIVE]"),
-    ("crowd/services/settlement.py", "        funded = total > c.goal", "        funded = total >= c.goal"),
-    ("crowd/services/settlement.py",
-     "            attempted = 0\n            for p in sorted(pledges, key=lambda p: p.pledge_id):\n                attempted += 1\n",
-     "            successful = 0\n            for p in sorted(pledges, key=lambda p: p.pledge_id):\n"),
-    ("crowd/services/settlement.py", "                    result[\"collected\"] += p.amount\n",
-     "                    result[\"collected\"] += p.amount\n                    successful += 1\n"),
-    ("crowd/services/settlement.py", "PER_CHARGE_FEE * attempted)", "PER_CHARGE_FEE * successful)"),
+    ("crowd.py", "        if c.pledges.pop(backer, None) is None:\n            raise CrowdError(\"no pledge to cancel\")",
+     "        old = c.pledges.pop(backer, None)\n        if old is None:\n            raise CrowdError(\"no pledge to cancel\")\n        if old.tier:\n            c.tiers[old.tier].taken -= 1"),
+    ("crowd.py", "        if tier != old.tier:\n            self._claim(c, tier, amount)",
+     "        if tier != old.tier:\n            self._claim(c, tier, amount)\n            if old.tier:\n                c.tiers[old.tier].taken -= 1"),
+    ("crowd.py", "        if self.total(campaign_id) <= c.goal:", "        if self.total(campaign_id) < c.goal:"),
+    ("crowd.py", "        if at > c.deadline:", "        if at >= c.deadline:"),
+    ("crowd.py", "                processing += money(p.amount * PROCESSING_PCT)", "                processing += money(p.amount * PROCESSING_PCT) + PROCESSING_FIXED"),
+    ("crowd.py", "        processing += PROCESSING_FIXED * len(c.pledges)\n", ""),
+    ("crowd.py", "            if self.gateway.charge(p.backer, p.amount):",
+     "            if self.gateway.charge(p.backer, p.amount) or self.gateway.charge(p.backer, p.amount):"),
 ]

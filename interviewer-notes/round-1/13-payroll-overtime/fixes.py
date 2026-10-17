@@ -1,8 +1,9 @@
 FIXES = [
-    ("payroll/services/overtime.py", "    overtime = max(hours - DAILY_REGULAR, ZERO)", "    overtime = max(min(hours, DAILY_DOUBLE_AFTER) - DAILY_REGULAR, ZERO)"),
-    ("payroll/services/overtime.py", "    total_hours = sum((d.hours for d in days), ZERO)\n    excess = max(total_hours - WEEKLY_REGULAR, ZERO)",
-     "    excess = max(sum((r[1] for r in rows), ZERO) - WEEKLY_REGULAR, ZERO)"),
-    ("payroll/services/timesheets.py", "hours[shift.end.date()] += shift_hours(shift)", "hours[shift.start.date()] += shift_hours(shift)"),
-    ("payroll/services/timesheets.py", "hours >= MEAL_BREAK_AFTER:", "hours > MEAL_BREAK_AFTER:"),
-    ("payroll/services/rates.py", "    latest = max(worker.rates, key=lambda r: r.effective)", "    latest = max(applicable, key=lambda r: r.effective)"),
+    ("payroll.py", "        if hours >= BREAK_AFTER:", "        if hours > BREAK_AFTER:"),
+    ("payroll.py", "            overtime = max(hours - DAILY_REGULAR, Decimal(0))\n            double = Decimal(0)",
+     "            overtime = min(max(hours - DAILY_REGULAR, Decimal(0)), DAILY_DOUBLE - DAILY_REGULAR)\n            double = max(hours - DAILY_DOUBLE, Decimal(0))"),
+    ("payroll.py", "            weekly_hours += hours\n", "            weekly_hours += regular\n"),
+    ("payroll.py", "        return history[-1][1]",
+     "        current = [(when, rate) for when, rate in history if when <= day]\n        if not current:\n            raise PayrollError(f\"no rate for {employee} on {day}\")\n        return max(current, key=lambda r: r[0])[1]"),
+    ("payroll.py", "            day = s.end.date()", "            day = s.start.date()"),
 ]

@@ -1,10 +1,11 @@
 FIXES = [
-    ("shipping/services/weights.py", "from decimal import ROUND_HALF_UP, Decimal", "from decimal import ROUND_CEILING, Decimal"),
-    ("shipping/services/weights.py", "    return pkg.length * pkg.width * pkg.height / CARRIERS[carrier][\"divisor\"]",
-     "    l, w, h = (d.to_integral_value(rounding=ROUND_CEILING) for d in (pkg.length, pkg.width, pkg.height))\n"
-     "    return l * w * h / CARRIERS[carrier][\"divisor\"]"),
-    ("shipping/services/weights.py", "rounding=ROUND_HALF_UP)))", "rounding=ROUND_CEILING)))"),
-    ("shipping/services/rating.py", "fuel = cents((base + oversize + residential_fee) * CARRIERS", "fuel = cents((base + oversize) * CARRIERS"),
-    ("shipping/services/checkout.py", "    if subtotal >= FREE_THRESHOLD and", "    if subtotal - discount >= FREE_THRESHOLD and"),
-    ("shipping/services/estimate.py", "ordered_at.hour > CUTOFF_HOUR", "ordered_at.hour >= CUTOFF_HOUR"),
+    ("shipping.py", "    return Decimal(round(weight * 2)) / 2", "    return Decimal(math.ceil(weight * 2)) / 2"),
+    ("shipping.py", "    charge = c[\"base\"] + c[\"per_kg\"][zone] * billable_weight(parcel)\n",
+     "    charge = c[\"base\"] + c[\"per_kg\"][zone] * billable_weight(parcel)\n    charge += charge * FUEL\n"),
+    ("shipping.py", "        charge += RESIDENTIAL\n    charge += charge * FUEL\n", "        charge += RESIDENTIAL\n"),
+    ("shipping.py", "    if placed_at.time() >= CUTOFF or d.weekday() >= 5:", "    if placed_at.time() > CUTOFF or d.weekday() >= 5:"),
+    ("shipping.py", "    return ship_date(placed_at) + timedelta(days=CARRIERS[carrier][\"days\"][zone])",
+     "    d = ship_date(placed_at)\n    for _ in range(CARRIERS[carrier][\"days\"][zone]):\n        d = _next_business_day(d)\n    return d"),
+    ("shipping.py", "    if Decimal(str(order_total)) >= FREE_THRESHOLD:\n        return {\"carrier\": \"BUDGET\", \"price\": Decimal(\"0.00\"), \"delivery\": delivery_date(\"BUDGET\", zone, placed_at)}",
+     "    budget_when = delivery_date(\"BUDGET\", zone, placed_at)\n    if Decimal(str(order_total)) >= FREE_THRESHOLD and (deadline is None or budget_when <= deadline):\n        return {\"carrier\": \"BUDGET\", \"price\": Decimal(\"0.00\"), \"delivery\": budget_when}"),
 ]

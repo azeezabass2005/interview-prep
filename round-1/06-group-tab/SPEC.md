@@ -1,48 +1,34 @@
 # Group Tab
 
-An app for friends who share costs (trips, flat bills, dinners). A group records **expenses** (who paid, how it's split) and **payments**
-(one member paying another back). The app shows each member's **balance** and suggests the fewest transfers to settle up. The repository
-contains the backend.
+Friends track shared expenses in a group. Anyone can record an expense they paid and how it's split; members record payments to each
+other; the app shows balances and suggests how to settle up. `tab.py` holds the logic.
 
-## Money
+## Expenses
 
-All amounts are in cents. **No cent may be lost or invented:** the shares of an expense always add up to the expense amount exactly, and
-the group's balances always add up to zero.
+An expense has a payer, an amount (> 0), the participants (all group members) and a split mode:
 
-## Splitting an expense
-
-| Split | Input | Rule |
+| Mode | Values | Each participant owes |
 |---|---|---|
-| EQUAL | participants | Total ÷ number of participants, rounded down; leftover cents go one each to participants in **alphabetical** order. |
-| EXACT | amount per participant | Amounts must add up to the total, otherwise the expense is rejected. |
-| PERCENT | percentage per participant | Percentages must add up to 100. Each share is rounded down; leftover cents go one each to the participants with the **largest fractional remainder** (ties: alphabetical). |
-| SHARES | integer weight per participant | Like PERCENT, using weight ÷ total weight. Same leftover rule. |
+| EQUAL | none | amount ÷ number of participants |
+| EXACT | an amount per participant | that amount; amounts **must add up to the expense** |
+| PERCENT | a percentage per participant | that % of the amount; percentages **must add up to 100** |
+| SHARES | a number of shares per participant | amount × their shares ÷ **total shares** |
 
-Only group members can pay or participate.
+Shares are rounded **down** to the cent; leftover cents go **one cent each to the participants in the order they were listed**, so the
+shares always add up to the expense amount exactly.
+
+Expenses can be deleted; a deleted expense no longer affects anything.
 
 ## Balances
 
-A member's balance = what they paid for others − what others paid for them:
-- for each expense: the payer is credited the full amount; each participant is debited their share;
-- for each payment *A pays B*: A's balance goes **up**, B's goes **down**.
+A member's balance = what they paid for others − what they owe. Positive means the group owes them. A **payment** from A to B (A paying
+back B) moves A's balance up and B's down by the amount. Balances always add up to zero.
 
-Expenses can be **edited** (replaced) or **deleted**; deleted expenses no longer affect balances.
+## Settle up
 
-## Settling up
+Suggest payments: repeatedly the member who owes the most pays the member owed the most, the smaller of the two amounts.
 
-Suggested transfers are produced greedily: repeatedly take the member who owes the most and the member who is owed the most, and transfer
-the smaller of the two amounts. Ties are broken alphabetically. Members with a zero balance are left out.
+## Example
 
-## Data model
-
-| Entity | Fields |
-|---|---|
-| Group | group id, name, members |
-| Expense | expense id, payer, amount, description, split type, split details, shares, deleted? |
-| Payment | payment id, from member, to member, amount |
-
-## Examples
-
-- $10.00 split EQUAL between ann, bob, cy → ann 334, bob 333, cy 333.
-- $1.00 split PERCENT ann 33⅓ / bob 33⅓ / cy 33⅓ is invalid (doesn't add up to exactly 100); ann 50 / bob 25 / cy 25 → 50, 25, 25.
-- Balances ann +50.00, bob +30.00, cy −50.00, dan −30.00 → suggested: **cy → ann 50.00**, **dan → bob 30.00**.
+Ana pays $90.00 dinner, EQUAL among Ana, Ben, Cai. Ben pays $45.00 taxi, EXACT: Ben $15, Cai $30.
+Balances: Ana **+60.00**, Ben **0.00**, Cai **−60.00**. Settle up: **Cai pays Ana $60.00**.

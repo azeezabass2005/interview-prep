@@ -1,10 +1,10 @@
 import unittest
 from datetime import datetime
 
-from studio.app import build_app
+from studio import Studio
 
 
-class FakeClock:
+class Clock:
     def __init__(self, now):
         self.current = now
 
@@ -13,13 +13,12 @@ class FakeClock:
 
 
 class TestStudio(unittest.TestCase):
-    def test_book_until_full(self):
-        api = build_app(FakeClock(datetime(2026, 9, 1, 8, 0)))
-        api.add_class("spin", "2026-09-02T18:00", 1)
-        api.join("ana", "UNLIMITED")
-        api.join("sam", "UNLIMITED")
-        self.assertEqual(api.book("spin", "ana")[1]["status"], "BOOKED")
-        self.assertEqual(api.book("spin", "sam")[1]["status"], "WAITLISTED")
+    def test_full_class_waitlists(self):
+        studio = Studio(Clock(datetime(2026, 9, 1, 8, 0)))
+        studio.add_class("spin", datetime(2026, 9, 2, 18, 0), 1)
+        studio.join("ana", "UNLIMITED")
+        studio.join("ben", "UNLIMITED")
+        self.assertEqual((studio.book("spin", "ana"), studio.book("spin", "ben")), ("BOOKED", "WAITLISTED"))
 
 
 if __name__ == "__main__":

@@ -1,75 +1,62 @@
-# R1-16 · Bond Trade Booking: Interviewer Guide
+# R1-16 · Bond Accrued Interest: Interviewer Guide
 
-~240 lines in `bonds/`. One passing test (a 30/360 bond settling mid-period). **The spec example passes on the buggy code.**
-Conventions are precisely defined, so each bug corresponds to one spec sentence.
+One file, `bonds.py` (~90 lines), with one passing test (plain T+2). The spec example passes on the buggy code (a mid-month
+coupon, no holiday, 30/360).
 
 ## Session plan (60 min)
-0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
+0–5 resume · 5–12 spec summary + questions · 12–17 code walk · 17–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
 | Question | Answer |
 |---|---|
-| Feb end-of-month in 30/360 | Ignore the February rule (simplified US 30/360 as specified). |
-| Settlement on maturity | Rejected (already). |
-| Settlement on a coupon date | Accrued 0; the coupon goes to the seller. |
-| Holidays | Whatever is loaded into the calendar. Weekends always closed. |
-| Sell side | Same amounts; sign handled in reporting. |
-| Odd first coupons | Out of scope. |
+| Holiday on a weekend | Already skipped. |
+| Settlement on maturity | Out of scope (error is fine). |
+| Accrued rounding | Per trade, after multiplying by quantity. |
+| End-of-month bonds | Dates computed from maturity, as in the spec. |
+| Negative accrued (ex-coupon) | Out of scope. |
 
 ## Code map
-| Module | Responsibility |
-|---|---|
-| `calendar.py` | Month shifting, business days, holidays |
-| `daycount.py` | 30/360 days, year fractions |
-| `schedule.py` | Coupon dates, previous/next coupon |
-| `services/pricing.py` | Accrued and settlement amounts |
-| `services/booking.py` | Reference data, trade booking, validation |
-| `reporting.py`, `store.py`, `api.py`, `app.py` | Settlement ladder (correct), storage, facade |
+`add_months` · `days_30_360` · `Bond.coupon_dates` · `previous_coupon` · `accrued` · `Desk.settlement_date` · `book`.
 
 ## Planted bugs (5)
 
-### B1 · 30/360: D2 adjusted unconditionally
-- **Where:** `daycount.py::days_30_360`: `if d2 == 31` without checking `d1 == 30`.
-- **Test:** coupon Jan 15, settle Mar 31 (trade Mon Mar 30) → 76 days → **10,555.56** (buggy 10,416.67).
-- **Fix:** `if d2 == 31 and d1 == 30`.
+### B1 · Holidays ignored in settlement
+- **Where:** `_business_day`; `self.holidays` is stored but never read (clue).
+- **Test:** trade Wed 23 Dec, holiday Fri 25 Dec → settles **Mon 28 Dec**.
 
-### B2 · No end-of-month rule
-- **Where:** `schedule.py::coupon_dates` uses `shift_months`, which only clamps. A month-end maturity (Jun 30) produces Dec **30**, not Dec 31.
-- **Why it hides:** under 30/360, day 30 and day 31 are equivalent as a start date. It only shows on **ACT/360** bonds.
-- **Test:** ACT/360, 5%, maturity 2030-06-30, settle 2026-01-15 → 15 days → **2,083.33**. (Also needs B5 fixed.)
-- **Fix:** if `is_month_end(maturity)`, snap each date to its month's last day.
+### B2 · 30/360 doesn't adjust D1 = 31
+- **Where:** `days_30_360`.
+- **Test:** coupon 31 Jan → settle 15 Feb = **15 days** → $2.50 at 6% (buggy 14 days → $2.33).
 
-### B3 · Holidays ignored
-- **Where:** `calendar.py::is_business_day`: checks weekends only.
-- **Test:** holiday Fri 2026-04-03; trade Thu Apr 2 → settles **Mon Apr 6**.
-- **Fix:** `and d not in self.holidays`.
+### B3 · ACT/360 divides by 365
+- **Where:** `accrued`: `basis`.
+- **Test:** 30 actual days at 6% → **$5.00** (buggy $4.93).
 
-### B4 · Settling on a coupon date accrues a whole period
-- **Where:** `schedule.py::surrounding_coupons`: `d < settle`.
-- **Test:** trade Thu 2026-05-14 → settles on coupon date May 15 → accrued **0.00**.
-- **Fix:** `<=`.
+### B4 · Settling on a coupon date accrues a full period
+- **Where:** `previous_coupon`: `d < settle`.
+- **Test:** settle on 15 Jun (a coupon date) → **0**.
 
-### B5 · ACT/360 divides by 365
-- **Where:** `daycount.py::year_fraction`.
-- **Test:** ACT/360, maturity 2030-05-15, settle 2026-01-15 (61 days) → **8,472.22** (buggy 8,356.16).
-- **Fix:** `/ 360`.
+### B5 · End-of-month schedule drifts
+- **Where:** `coupon_dates` steps iteratively, so 31 Aug → 28 Feb → 28 Aug.
+- **Test:** maturity 31 Aug 2030, settle 10 Sep 2026 → previous coupon **31 Aug 2026** (buggy 28 Aug).
 
-Hints for each: (1) "Which sentence of the spec covers this?" (2) "Pick an input where the two readings differ."
+Hints: (1) "which field is never read?"; (2) "what's special about the 31st?"
 
 ## Red herrings
-- `shift_months` clamping (31 June → 30 June) is required by the spec; it's only incomplete (B2).
-- Rounding principal and accrued separately is per spec.
+- The D2 = 31 rule: correct.
+- Rounding per trade: correct.
 
 ## Questions about the candidate's fixes (data structures)
-- **B3:** "Holidays are a `set`. Why not a list? Cost of membership?" (O(1) average vs O(n).) "`add_business_days` loops day by day. For T+30, could you jump?" (Count weekdays arithmetically, then adjust for holidays in range using a sorted holiday list + bisect.)
-- **B2/B4:** "Every booking regenerates the coupon schedule back from maturity: O(periods). How would you cache it?" (Schedules are immutable per bond: memoise per bond id, then `bisect` for the previous coupon → O(log n).)
-- **Conventions:** "Two conventions are an if/elif. With 6 conventions?" (A registry dict: name → function, which is open for extension; unknown names fail fast.)
+- **`coupon_dates`** builds the schedule back to the settlement date on every call: O(periods). "For a 30-year quarterly bond and thousands of trades?" (Precompute once per bond — 120 dates — and `bisect_right` for the previous coupon: O(log n). Cache with `functools.lru_cache` on a frozen dataclass.)
+- **Holidays as a set:** "Why a set?" (O(1) lookups.) "Settlement T+2 is fine, but 'add 250 business days'?" (Sorted holiday list + counting with bisect; or a precomputed business-day index.)
+- **B5:** "Why does iterating `add_months` drift while computing from maturity doesn't?" (Clamping loses information.)
+- **Decimal vs float for days/360:** "Where could float hurt here?" (Repeated division; displayed cents off by one.)
 
 ## Feature requests
-1. **"Ex-coupon period: trades settling within 7 days before a coupon get negative accrued (the buyer doesn't receive that coupon)."** Strong answer: accrue to the **next** coupon as a negative amount; calendar vs business days (ask PM); tests on both sides of the ex date.
-2. **"ACT/ACT (ICMA) day count."** Strong answer: year fraction = days / (frequency × days in the coupon period); needs both surrounding coupons (the function already returns them).
-3. **"Trade amendments and cancellations with an audit trail."** Strong answer: immutable trade versions; recompute amounts on amend; the settlement ladder uses the latest active version.
+1. **"ACT/ACT (ICMA) convention."** Strong answer: days ÷ (frequency × days in the coupon period); needs both coupon dates; tests on a leap year.
+2. **"Ex-coupon period: trades settling within 7 days before a coupon get negative accrued."** Strong answer: compare settle with next coupon − 7; negative days; the seller gets the coupon.
+3. **"Multiple calendars: settle on days open in both New York and London."** Strong answer: union of holiday sets; calendar per currency.
 
 ## Scoring signals
-- **Strong:** realises the example passes; builds a table of cases per convention; asks "what would differ between 30/360 and ACT/360 here?"
-- **Weak:** tests only 30/360 mid-month dates.
+- **Strong:** tests month-end dates; spots the unused holidays; reasons about day-count edge cases.
+- **Weak:** only mid-month dates.

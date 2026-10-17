@@ -1,14 +1,12 @@
 import unittest
+from decimal import Decimal
 
-from shipping.app import build_app
+from shipping import Parcel, price
 
 
 class TestShipping(unittest.TestCase):
-    def test_small_box_commercial(self):
-        status, q = build_app().quote({"packages": [{"l": 6, "w": 6, "h": 6, "lb": 3}], "zone": 1, "residential": False,
-                                       "subtotal": "20", "ordered_at": "2026-03-03T10:00"})
-        self.assertEqual(status, 200)
-        self.assertEqual(q["rates"]["SPEEDY"], "6.72")
+    def test_small_budget_parcel(self):
+        self.assertEqual(price("BUDGET", Parcel(Decimal("1"), 10, 10, 10), 1), Decimal("7.15"))
 
 
 if __name__ == "__main__":

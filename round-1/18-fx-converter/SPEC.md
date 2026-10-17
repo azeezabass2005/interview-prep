@@ -1,35 +1,32 @@
-# FX Payments Service
+# FX Converter
 
-Customers send money abroad in two steps: they request a **quote** (how much the recipient will get), then **book** a payment against that
-quote. The repository contains the rate book, quoting, booking and limits.
+A payments company converts money between currencies for its clients. A client asks for a **quote**, then **books** it.
+`fx.py` holds the rate book, quotes and bookings.
 
 ## Rates
 
-- Mid-market rates are published per pair `BASEQUOTE` = units of QUOTE per 1 BASE, always against USD: e.g. `EURUSD 1.0850`, `USDJPY 151.20`.
-- Cross rates go through USD.
-- A rate older than **60 seconds** must not be used; quoting with one fails.
+The rate book holds a **mid rate per currency, in units per 1 USD** (e.g. EUR 0.92, JPY 155). The mid rate from currency A to currency B is
+`rate[B] ÷ rate[A]` (USD has rate 1). Rates can be updated at any time; a quote keeps the rate it was given.
 
 ## Quotes
 
-- **Spread** by the amount's **USD equivalent** at mid: under $10,000 → 1.00%; $10,000 to under $100,000 → 0.50%; $100,000+ → 0.25%.
-- Target amount = source × cross mid × (1 − spread), **rounded down** to the target currency's minor unit (USD/EUR/GBP: 2 decimals,
-  **JPY: 0**, KWD: 3).
-- A quote is valid for **30 seconds**.
+- The client rate is the mid rate **minus a 0.5% spread** (the client always gets slightly less than mid).
+- The amount the client receives is rounded **down** to the destination currency's minor unit: 2 decimals for USD, EUR and GBP,
+  **0 decimals for JPY**.
+- A quote is valid for **30 seconds** from when it's issued; it can be booked up to and including the 30th second.
 
 ## Booking
 
-- A payment is booked against a **valid** (unexpired) quote, at exactly the quoted amounts. Each quote can be booked once.
-- **Daily limit:** each customer may book at most **$50,000** USD-equivalent (the quote's USD equivalent) per calendar day (UTC).
-- A payment can be **cancelled** within 30 minutes of booking; cancelled payments don't count toward the daily limit.
+- A quote can be booked once.
+- **Daily limit:** a client can convert at most **USD 50,000 equivalent per UTC day**, counting all their bookings that day. The USD
+  equivalent of a booking is its source amount converted at the **mid** rate.
 
-## Data model
+## Other operations
 
-| Entity | Fields |
-|---|---|
-| Rate | pair, rate, published at |
-| Quote | quote id, customer, source currency/amount, target currency/amount, mid, spread, USD equivalent, created at, booked? |
-| Payment | payment id, quote id, customer, booked at, status (BOOKED / CANCELLED) |
+- A client can **cancel** an open quote; `expire_quotes` marks quotes past their validity as EXPIRED.
+- `usage(client, day)`: USD equivalent booked that day and what's left of the limit.
+- `blotter(day)`: the day's bookings (client, source currency, amount, target currency, amount received), sorted.
 
 ## Example
 
-1,000 EUR → JPY: 1,000 × 1.0850 = 1,085 USD → × 151.20 = 164,052 JPY mid. USD equivalent $1,085 → 1% → 162,411.48 → **¥162,411**.
+USD 1,000 → EUR with EUR at 0.9200 per USD → client rate 0.9154 → **EUR 915.40**.

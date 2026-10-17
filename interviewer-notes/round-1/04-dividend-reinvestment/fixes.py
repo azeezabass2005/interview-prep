@@ -1,12 +1,8 @@
 FIXES = [
-    ("drip/services/processor.py", "holdings = self._register.holdings(event.security, event.pay_date)",
-     "holdings = self._register.holdings(event.security, event.record_date)"),
-    ("drip/services/processor.py", "if self._enrolment.currently_enrolled(account_id, event.security):",
-     "if self._enrolment.enrolled_on(account_id, event.security, event.record_date):"),
-    ("drip/services/processor.py",
-     "        fee = min(REINVEST_FEE, (gross * FEE_CAP_RATE).quantize(CENT, rounding=ROUND_HALF_UP))\n        investable = net - fee\n",
-     "        fee = min(REINVEST_FEE, (net * FEE_CAP_RATE).quantize(CENT, rounding=ROUND_HALF_UP))\n"
-     "        investable = net - fee + self._store.leftover(account.account_id, event.security)\n"),
-    ("drip/services/withholding.py", "    return WITHHOLDING_RATES.get(account.country.upper(), Decimal(\"0\"))",
-     "    return WITHHOLDING_RATES.get(account.country.upper(), DEFAULT_WITHHOLDING_RATE)"),
+    ("drip.py", "self.shares_on(account, symbol, pay_date)", "self.shares_on(account, symbol, record_date)"),
+    ("drip.py", "WITHHOLDING.get(self.countries[account], Decimal(\"0\"))", "WITHHOLDING.get(self.countries[account], DEFAULT_WITHHOLDING)"),
+    ("drip.py", "(net / price).quantize(SHARE_UNIT, rounding=ROUND_HALF_UP)", "(net / price).quantize(SHARE_UNIT, rounding=ROUND_DOWN)"),
+    ("drip.py", "                cash = Decimal(\"0.00\")\n", "                cash = (net - bought * price).quantize(CENT, rounding=ROUND_DOWN)\n"),
+    ("drip.py", "        return history[-1][1] if history else False",
+     "        state = False\n        for when, enrolled in sorted(history, key=lambda h: h[0]):\n            if when <= on:\n                state = enrolled\n        return state"),
 ]

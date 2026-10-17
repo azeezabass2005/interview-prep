@@ -1,40 +1,43 @@
 import unittest
 
-from ipo.app import build_app
-
-
-def book(*orders, offering=10_000):
-    api = build_app()
-    api.create("X", offering)
-    for investor, shares, limit in orders:
-        api.submit("X", {"investor": investor, "shares": shares, "limit": limit})
-    return api
-
-
-RETAIL_FULL = (("r1", 1_000, "21"), ("r2", 1_000, "21"))
+from ipo import OrderBook
 
 
 class HiddenIpo(unittest.TestCase):
-    def test_B1_orders_below_price_drop_out(self):
-        api = book(("i1", 3_000, "21"), ("i3", 6_000, "19"))
-        self.assertEqual(api.close("X", "20")[1]["allocations"].get("i3", 0), 0)
+    def test_B1_limit_equal_to_price_is_eligible(self):
+        book = OrderBook(1000)
+        book.place("a", "fund", "INSTITUTIONAL", 500, limit="20.00")
+        self.assertEqual(book.allocate("20.00").get("a"), 500)
 
-    def test_B2_unused_retail_moves_to_institutional(self):
-        api = book(("r1", 1_000, "21"), ("i1", 9_000, "21"))
-        self.assertEqual(api.close("X", "20")[1]["allocations"]["i1"], 9_000)
+    def test_B2_amending_up_loses_priority(self):
+        book = OrderBook(1000)
+        book.place("r", "ana", "RETAIL", 200)
+        book.place("a", "f1", "INSTITUTIONAL", 300)
+        book.place("b", "f2", "INSTITUTIONAL", 200)
+        book.place("c", "f3", "INSTITUTIONAL", 300)
+        book.amend("b", shares=300)
+        alloc = book.allocate("20")
+        self.assertEqual((alloc["a"], alloc["b"], alloc["c"]), (267, 266, 267))
 
-    def test_B3_pro_rata_rounds_down(self):
-        api = book(*RETAIL_FULL, ("i1", 6_500, "21"), ("i2", 4_500, "21"))
-        alloc = api.close("X", "20")[1]["allocations"]
-        self.assertEqual((alloc["i1"], alloc["i2"]), (4_800, 3_200))
+    def test_B3_spare_tranche_shares_move(self):
+        book = OrderBook(1000)
+        book.place("r", "ana", "RETAIL", 100)
+        book.place("a", "fund", "INSTITUTIONAL", 900)
+        self.assertEqual(book.allocate("20")["a"], 900)
 
-    def test_B4_leftover_ties_to_earliest(self):
-        api = book(*RETAIL_FULL, ("i1", 3_000, "21"), ("i2", 3_000, "21"), ("i3", 3_000, "21"))
-        alloc = api.close("X", "20")[1]["allocations"]
-        self.assertEqual((alloc["i1"], alloc["i2"], alloc["i3"]), (2_700, 2_700, 2_600))
+    def test_B4_retail_in_lots_of_100(self):
+        book = OrderBook(1000)
+        book.place("r1", "ana", "RETAIL", 300)
+        book.place("r2", "ben", "RETAIL", 100)
+        book.place("a", "fund", "INSTITUTIONAL", 800)
+        alloc = book.allocate("20")
+        self.assertEqual((alloc["r1"], alloc["r2"]), (200, 0))
 
-    def test_B5_amend_loses_time_priority(self):
-        api = book(*RETAIL_FULL, ("i1", 3_000, "21"), ("i2", 3_000, "21"), ("i3", 3_000, "21"))
-        api.amend("X", {"investor": "i1", "limit": "22"})
-        alloc = api.close("X", "20")[1]["allocations"]
-        self.assertEqual((alloc["i1"], alloc["i2"], alloc["i3"]), (2_600, 2_700, 2_700))
+    def test_B5_cancelled_orders_excluded(self):
+        book = OrderBook(1000)
+        book.place("r", "ana", "RETAIL", 200)
+        book.place("a", "f1", "INSTITUTIONAL", 900)
+        book.place("b", "f2", "INSTITUTIONAL", 900)
+        book.cancel("b")
+        alloc = book.allocate("20")
+        self.assertEqual((alloc["a"], alloc.get("b", 0)), (800, 0))

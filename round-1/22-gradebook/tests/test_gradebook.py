@@ -1,17 +1,18 @@
 import unittest
+from datetime import datetime
+from decimal import Decimal
 
-from gradebook.app import build_app
+from gradebook import Gradebook
+
+DUE = datetime(2026, 3, 1, 23, 59)
 
 
 class TestGradebook(unittest.TestCase):
-    def test_perfect_student(self):
-        api, _ = build_app()
-        api.create("CS101", ["ana"])
-        for aid, cat in (("hw1", "HOMEWORK"), ("q1", "QUIZ"), ("mid", "MIDTERM"), ("fin", "FINAL")):
-            api.assignment("CS101", {"id": aid, "category": cat, "max_points": 10, "due": "2026-03-01T23:59"})
-            api.submit("CS101", "ana", aid, "2026-03-01T12:00")
-            api.grade("CS101", "ana", aid, 10)
-        self.assertEqual(api.report("CS101", "ana")[1]["letter"], "A")
+    def test_on_time_quiz(self):
+        g = Gradebook()
+        g.add_assignment("q1", "QUIZ", 10, DUE)
+        g.submit("q1", "ana", 7, DUE)
+        self.assertEqual(g.category_percent("ana", "QUIZ", DUE), Decimal("70.00"))
 
 
 if __name__ == "__main__":

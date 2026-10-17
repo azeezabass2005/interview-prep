@@ -1,15 +1,18 @@
 import unittest
+from datetime import date
+from decimal import Decimal
 
-from tips.app import build_app
+from tips import TipPool
+
+DAY = date(2026, 3, 4)
 
 
 class TestTips(unittest.TestCase):
-    def test_two_servers_split_card_tips(self):
-        api = build_app()
-        for name in ("ann", "ben"):
-            api.shift({"employee": name, "role": "SERVER", "start": "2026-03-04T17:00", "end": "2026-03-04T22:00"})
-        api.declare({"day": "2026-03-04", "service": "DINNER", "card": "100", "cash": "0"})
-        self.assertEqual(api.distribute("2026-03-04", "DINNER"), (200, {"ann": "48.50", "ben": "48.50"}))
+    def test_single_server_gets_card_pool(self):
+        pool = TipPool()
+        pool.add_work("ana", "SERVER", DAY, "DINNER", 6)
+        pool.add_tips(DAY, "DINNER", card=200)
+        self.assertEqual(pool.distribute(DAY, "DINNER"), {"ana": Decimal("195.00")})
 
 
 if __name__ == "__main__":

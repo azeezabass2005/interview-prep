@@ -1,67 +1,62 @@
-# R1-28 · Library Circulation: Interviewer Guide
+# R1-28 · Library Fines: Interviewer Guide
 
-~255 lines in `library/`. One passing test (a book's due date). The holds queue adds a state rule that interacts with renewals.
+One file, `library.py` (~95 lines), with one passing test (a book's due date). **The spec example fails on the buggy code** (B1:
+Sunday due date).
 
 ## Session plan (60 min)
-0–5 resume · 5–15 spec + questions · 15–20 code map · 20–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
+0–5 resume · 5–12 spec summary + questions · 12–17 code walk · 17–45 bug hunt · 45–55 DS questions + feature request · 55–60 risks.
 
 ## PM answers
 | Question | Answer |
 |---|---|
-| Holiday on a Sunday | Closed either way. |
-| Grace | All-or-nothing: 1 open day late → 0; 2 → both days fined. |
-| Renewal base | Current due date, then the next open day. |
-| Renew with holds | Refused. |
-| Block threshold | $10.00 or more blocks borrowing. |
-| Item returned to another branch | Out of scope (same branch). |
+| Returned on the due date | No fine. |
+| Owing exactly $5.00 | Blocked. |
+| Renewed due date on a Sunday | Moves to Monday. |
+| Fines on Sundays | Calendar days (Sundays count). |
+| Hold placed by the borrower | Out of scope. |
 
 ## Code map
-| Module | Responsibility |
-|---|---|
-| `services/calendar.py` | Open days per branch |
-| `services/fines.py` | Fine calculation |
-| `services/circulation.py` | Checkout, holds, renewals, check-in |
-| `store.py`, `api.py`, `app.py` | Storage, facade, wiring |
+`add_item` · `add_patron` · `_due` · `_open_loan` · `checkout` (rules) · `place_hold` · `renew` · `check_in` (fines, hold shelf).
 
 ## Planted bugs (5)
 
-### B1 · Sundays treated as open
-- **Where:** `calendar.py::is_open`: only checks holidays.
-- **Test:** spec example DVD → **$6.00** (buggy $7.00). Also affects due dates landing on Sunday.
+### B1 · Sunday due dates not moved
+- **Where:** `_due`; `SUNDAY` is unused (clue).
+- **Test:** DVD Thursday 5 Mar → due **Mon 9 Mar**.
 
-### B2 · Book grace subtracts a day
-- **Where:** `fines.py::fine_for`: `days − 1` instead of "0 if ≤ 1 day".
-- **Test:** book due Mon 03-23, returned Wed 03-25 → **$0.50** (buggy $0.25).
+### B2 · Fine not capped
+- **Where:** `check_in`; `MAX_FINE` unused.
+- **Test:** DVD six weeks late → **$15.00**.
 
-### B3 · Renewal extends from today
-- **Where:** `circulation.py::renew`: `today + period`.
-- **Test:** book due 03-23, renewed on 03-10 → **04-13** (buggy 03-31).
+### B3 · Renewal from today
+- **Where:** `renew`: `_due(on, …)`.
+- **Test:** due 23 Mar, renewed 10 Mar → **13 Apr** (buggy 31 Mar).
 
-### B4 · Renewal ignores holds
-- **Where:** `circulation.py::renew`: never checks `item.holds`.
-- **Test:** ann has b1, bob places a hold, ann renews → 409.
+### B4 · Hold queue is LIFO
+- **Where:** `check_in`: `pop()`.
+- **Test:** bob then cat hold → **bob** gets it.
 
-### B5 · $10.00 exactly isn't blocked
-- **Where:** `circulation.py::checkout`: `balance > BLOCK_AT`.
-- **Test:** patron owing exactly 10.00 → checkout refused.
+### B5 · Returned loans count toward the limit
+- **Where:** `checkout`.
+- **Test:** 5 out, return 1, borrow another → allowed.
 
-Hints: (1) the spec sentence; (2) "which rule mentions this state and where is it enforced?"
+Hints: (1) "grep the constants: which are never read?"; (2) "what does `list.pop()` take from?"
 
 ## Red herrings
-- The hold shelf: a returned item is reserved for the first patron in the queue (correct).
-- The max fine cap: correct.
+- The $5.00 block uses `>=`: correct.
+- The hold shelf check in `checkout`: correct.
 
 ## Questions about the candidate's fixes (data structures)
-- **Holds:** "Holds use a `deque`. Why not a list? What about cancelling a hold in the middle?" (O(1) popleft; removing from the middle is O(n). For frequent cancels: a linked hash (dict + order) or lazy deletion.)
-- **Loans:** "`open_loan` scans every loan ever: O(L). Fix?" (A dict barcode → open loan, and patron → set of open loans.)
-- **Calendar:** "`open_days_after` loops day by day. For a 2-year-overdue item?" (Count whole weeks × 6, plus the remainder; subtract holidays in range via bisect on a sorted list.)
-- **B4:** "Why is checking holds inside `renew` better than in the API layer?" (Every caller gets the rule.)
+- **B4:** "`pop(0)` is O(n). Better?" (`collections.deque.popleft()`: O(1).) "Cancel a hold in the middle?" (O(n) in a deque; a dict + order for O(1).)
+- **`_open_loan` scans all loans ever:** O(L). "Index?" (Dict item → open loan; patron → set of open loans for the limit check.)
+- **B5:** "Counting with a generator each checkout: O(L). Alternative?" (Counter of open loans per patron.)
+- **Balances as Decimal:** "Why not float?" (Cents exact.)
 
 ## Feature requests
-1. **"Hold expiry: a patron has 7 days to collect a held item, then it goes to the next patron."** Strong answer: hold-shelf date on the item; a daily job; notifications; queue semantics stay FIFO.
-2. **"Auto-renewal: renew automatically 3 days before the due date if allowed."** Strong answer: a scheduled job reusing `renew` (same rules); idempotency; notification of failures.
-3. **"Fine forgiveness for kids' cards and 'fine-free days'."** Strong answer: a policy per patron type; calendar of fine-free days excluded from counting; audit.
+1. **"Hold pickup expiry: 3 days, then it goes to the next patron."** Strong answer: shelf date; a daily job; FIFO continues.
+2. **"Fine-free for children's cards."** Strong answer: patron type; policy lookup; caps.
+3. **"Auto-renew books 2 days before they're due if allowed."** Strong answer: scheduled job reusing `renew` rules; notification on failure.
 
 ## Scoring signals
-- **Strong:** turns the example into a test (finds B1), builds a holds scenario across two patrons, tests the exact threshold.
-- **Weak:** only checkout/check-in on time.
+- **Strong:** finds the unused constants; builds a two-hold scenario; tests the limit after a return.
+- **Weak:** only on-time returns.

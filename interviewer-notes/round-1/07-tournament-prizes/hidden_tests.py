@@ -1,54 +1,40 @@
 import unittest
+from decimal import Decimal
 
-from tourney.app import build_app
-
-
-def field(n):
-    api, _ = build_app()
-    api.create("t")
-    names = [f"p{i:02d}" for i in range(n)]
-    for name in names:
-        api.enter("t", name)
-    api.start("t")
-    return api, names
+from tournament import Tournament, TournamentError
 
 
-class HiddenTourney(unittest.TestCase):
-    def test_B1_guarantee_after_rake(self):
-        api, _ = field(20)
-        self.assertEqual(api.pool("t")[1]["pool_cents"], 200_000)
+def field(n, guarantee=0):
+    t = Tournament(guarantee)
+    for i in range(n):
+        t.register(f"p{i}")
+    return t
 
-    def test_B2_ten_entries_pay_two(self):
-        api, names = field(10)
-        for hand, name in enumerate(names[1:], start=1):
-            api.eliminate("t", {"hand": hand, "eliminated": [name], "winners": [names[0]]})
-        prizes = api.finish("t")[1]["prizes"]
-        self.assertEqual(len([v for v in prizes.values() if v > 0]), 2)
 
-    def test_B3_tied_players_split_places(self):
-        api, names = field(20)
-        winner, ben, cy, dee = names[0], names[1], names[2], names[3]
-        hand = 1
-        for name in names[4:]:
-            api.eliminate("t", {"hand": hand, "eliminated": [name], "winners": [winner]})
-            hand += 1
-        api.eliminate("t", {"hand": hand, "eliminated": [dee], "winners": [winner]})
-        api.eliminate("t", {"hand": hand + 1, "eliminated": [ben, cy], "winners": [winner]})
-        result = api.finish("t")[1]
-        self.assertEqual((result["prizes"][ben], result["prizes"][cy]), (50_000, 50_000))
-        self.assertEqual(sum(result["prizes"].values()), result["pool_cents"])
+class HiddenTournament(unittest.TestCase):
+    def test_B1_at_most_two_reentries(self):
+        t = field(3)
+        for _ in range(2):
+            t.eliminate({"p0": 100})
+            t.register("p0")
+        t.eliminate({"p0": 100})
+        with self.assertRaises(TournamentError):
+            t.register("p0")
 
-    def test_B4_at_most_two_reentries(self):
-        api, names = field(3)
-        for hand in range(1, 4):
-            api.eliminate("t", {"hand": hand, "eliminated": ["p02"], "winners": ["p00"]})
-            status = api.enter("t", "p02")[0]
-            self.assertEqual(status, 201 if hand < 3 else 409)
+    def test_B2_reentries_add_to_pool(self):
+        t = field(10)
+        for p in ("p0", "p1"):
+            t.eliminate({p: 100})
+            t.register(p)
+        self.assertEqual(t.prize_pool(), Decimal("1020"))
 
-    def test_B5_late_registration_through_level_6(self):
-        api, _ = field(3)
-        for _ in range(5):
-            api.next_level("t")
-        self.assertEqual(api.enter("t", "late6")[0], 201)
-        api.next_level("t")
-        self.assertEqual(api.enter("t", "late7")[0], 409)
+    def test_B3_ten_entries_pay_three_places(self):
+        self.assertEqual(field(10).prizes(), {1: Decimal("425"), 2: Decimal("255"), 3: Decimal("170")})
+
+    def test_B4_leftover_dollars_to_first(self):
+        self.assertEqual(field(11).prizes(), {1: Decimal("468"), 2: Decimal("280"), 3: Decimal("187")})
+
+    def test_B5_bigger_stack_finishes_higher(self):
+        t = field(4)
+        t.close_registration()
+        self.assertEqual(t.eliminate({"p0": 1000, "p1": 500}), {"p1": 4, "p0": 3})
