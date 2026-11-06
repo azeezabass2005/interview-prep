@@ -1,6 +1,0 @@
-from decimal import Decimal
-
-REARM_FRACTION = Decimal("0.005")
-INDEX_REFRESH_SECONDS = 60
-DELIVERY_BATCH_SIZE = 50
-DIRECTIONS = ("ABOVE", "BELOW")

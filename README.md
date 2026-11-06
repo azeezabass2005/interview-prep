@@ -1,13 +1,13 @@
 # Bloomberg AI-Assisted Coding Rounds: Mock Interview Kit
 
-100 practice exercises (50 per round) built to the format described in the Bloomberg AI interview prep workshop
+60 practice exercises (50 in Round 1, 10 larger services in Round 2) built to the format described in the Bloomberg AI interview prep workshop
 (*"What the Questions Look Like"* and *"How to Approach and Solve Them"*, plus the workshop slides):
 
 | Folder | Count | Format |
 |---|---|---|
 | `round-1/` | 50 | **Spec + single-file codebase.** A `SPEC.md` (rules, a worked example; no questions, no tickets) and **one Python file** (~75–125 lines, no comments) that claims to implement it, with **exactly 5 planted bugs** where the code doesn't match the spec and only **one passing test**. You find the bugs by writing tests from the spec. Covers all 50 topics below. |
-| `round-2/` | 50 | **Bigger codebases.** **01–20:** README + tickets + a multi-module service (API → services → repositories → SQLite, plus noise modules); four realistic tickets each, several concurrency problems across instances, several with **acceptance criteria that blame the wrong root cause**, out-of-scope issues. **21–50:** spec + a **multi-module package** (models, store, services, API, reporting; ~150–450 lines), one passing test, 5 bugs: the harder, multi-file version of Round 1 #01–30. |
-| `interviewer-notes/` | 100 | The interviewer's guide: session timeline, PM answers to clarifying questions, code map, **every planted bug** (location, symptom, root cause, minimal fix, the test to write, hints), red herrings, **data-structure and complexity questions about the candidate's fixes** (alternatives, time/space trade-offs), **feature requests** to discuss after the fixes, scoring signals, plus `hidden_tests.py` and reference `fixes.py`. |
+| `round-2/` | 10 | **Full-stack services with real backend bugs.** Each is a product with a Next.js front end (`web/`, context only) on a plain-Python backend (standard library: `sqlite3`, hand-written router, middleware, repositories, TTL cache, rate limiter, durable job queue, third-party HTTP adapters), ~500–900 lines, a passing test suite and **5 tickets**. Every ticket is a different real backend failure: authorization (IDOR, role vs. object), rate limiting, data access (SQL precedence, injection, N+1, transactions, pagination, soft deletes), caching (keys, TTL units, mutation, invalidation), background jobs (idempotency, claiming, backoff, poison messages), observability (secrets/PII in logs, metrics, tracing), middleware and error handling, and adapters (retries, idempotency keys, webhooks, error classification). |
+| `interviewer-notes/` | 60 | The interviewer's guide: session timeline, PM answers to clarifying questions, code map, **every planted bug** (location, symptom, root cause, minimal fix, the test to write, hints), red herrings, **data-structure and complexity questions about the candidate's fixes** (alternatives, time/space trade-offs), **feature requests** to discuss after the fixes, scoring signals, plus `hidden_tests.py` and reference `fixes.py`. |
 
 Everything is Python 3 **standard library only** (no installs, the same constraint as the real interview). Tests use `unittest`.
 
@@ -22,8 +22,7 @@ Everything is Python 3 **standard library only** (no installs, the same constrai
 cd ~/Projects/interview-prep
 python mock.py list                 # all exercises
 python mock.py start 1              # random round-1 exercise
-python mock.py start 2 01           # a specific round-2 exercise (01 = the workshop's calendar ticket)
-python mock.py start 2 21           # round-2 multi-module spec exercise (the harder Pot Luck)
+python mock.py start 2 03           # a specific round-2 service (03 = market data API)
 ```
 
 `start` copies the exercise into `sessions/<timestamp>-…/` and commits the starting point to git, so you can review **your diff**
@@ -33,10 +32,11 @@ at the end. Open that folder in your IDE with your agent (Copilot / Claude Code 
 2. **Round 1 (50 min):** read `SPEC.md`, summarise it, ask your clarifying questions, map the code with the agent, then hunt for
    places where the code doesn't match the spec: write a failing test, explain it, make a minimal fix, repeat. The interviewer then asks
    about the data structures in your fixes and gives you a feature request to design.
-   **Round 2 (50 min):** for 01–20, read `README.md` and `tickets/`, pick **one** ticket and take it all the way; for 21–50, it's the
-   Round 1 workflow on a multi-module codebase. Talk the whole time; record yourself if you can.
+   **Round 2 (50 min):** read `README.md` and `tickets/`, pick **one** ticket (or take the one the interviewer gives you) and take it
+   all the way: reproduce it with a failing test, find the root cause, make the narrowest fix, prove it. `web/` is the Next.js front
+   end; the bugs are all in the Python backend. Talk the whole time; record yourself if you can.
 3. Clarifying questions: say them out loud. Solo? `python mock.py pm <session>` prints the PM's answers (every spec-based exercise)
-   **without** the bug list. Ticket exercises (Round 2 01–20) have no PM sheet: state your assumption and question the acceptance criteria.
+   **without** the bug list. Round 2 tickets have a PM sheet too (`python mock.py pm`): state your assumption and question the acceptance criteria.
 4. Finish:
 
 ```bash
@@ -132,81 +132,38 @@ follow-up questions at the end, and fill in `SCORECARD.md` while you work.
 | 49 | leaderboard | Valuation, qualification, tie-breaks, paging |
 | 50 | document-versioning | Optimistic concurrency, restore, retention, publishing |
 
-### Round 2: tickets + multi-module service (01–20)
-| # | Exercise | Service |
+### Round 2: full-stack services, 5 tickets each
+| # | Service | Tickets (the real root-cause area) |
 |---|---|---|
-| 01 | meeting-calendar | **The workshop's "Blike Moomberg's Calendar"** (includes `CAL-TICKET-duplicate-request`) |
-| 02 | order-management | Equity order management system |
-| 03 | market-data-cache | Quote service with per-instance cache |
-| 04 | price-alerts | Price alerts: evaluators + delivery workers |
-| 05 | payments-ledger | Wallet ledger with invariants |
-| 06 | event-ticketing | Reserved-seat box office |
-| 07 | link-shortener | Internal URL shortener |
-| 08 | job-queue | Durable background job queue |
-| 09 | inventory-reservations | E-commerce stock reservations |
-| 10 | chat-messaging | Team chat backend |
-| 11 | news-feed | News aggregator and paged feed |
-| 12 | api-gateway | Rate-limiting API gateway |
-| 13 | user-accounts | Sign-up, login lockout, password reset |
-| 14 | expense-approvals | Expense approval workflow |
-| 15 | trade-settlement | Post-trade settlement and reconciliation |
-| 16 | pnl-service | Portfolio P&L with lots and splits |
-| 17 | feature-flags | Feature flag evaluation |
-| 18 | room-booking | Global meeting-room booking |
-| 19 | leaderboard | Trading competition leaderboard |
-| 20 | document-versioning | Versioned research documents |
-
-### Round 2: spec + multi-module package (21–50)
-| # | Exercise | System |
-|---|---|---|
-| 21 | pot-luck | The workshop's own example, extended: multi-draw fundraiser with entries, limits, cancellations, rollover |
-| 22 | brokerage-commission | Brokerage fee engine: equity tiers, options, regulatory fee, busted trades, monthly statements |
-| 23 | parking-garage | Garage operations: gates, capacity with reserved spaces, validations, passes, pricing |
-| 24 | dividend-reinvestment | DRIP processor: share register, withholding by country, enrolment history, reinvestment |
-| 25 | order-matching | Mini exchange: limit and IOC orders, amend/cancel, trade tape, depth |
-| 26 | group-tab | Group expenses: four split modes, edits/deletes, payments, settle-up suggestions |
-| 27 | tournament-prizes | Card-room tournament: late registration, re-entries, eliminations, prize pool, bounties |
-| 28 | miles-ledger | Frequent flyer program: earning, status tiers, expiry, redemption, transfers |
-| 29 | silent-auction | Charity auction: proxy bidding, increment bands, soft close, invoices |
-| 30 | ride-fare | Ride-hailing billing: locked surge, trip lifecycle, wait time, promos, driver payouts |
-| 31 | ipo-allocation | IPO bookbuilding: price limits, retail/institutional tranches, amendments, allocation |
-| 32 | bowling-score | Bowling league: game scoring, handicaps, team points |
-| 33 | payroll-overtime | Weekly payroll run: shifts, meal breaks, rate changes, daily/weekly overtime |
-| 34 | solar-net-metering | Utility billing: cumulative registers, prorated tiers, banking, true-up |
-| 35 | card-statement | Credit card billing cycles: ADB interest, grace, payment allocation, fees |
-| 36 | bond-accrued-interest | Bond trade booking: schedules, holidays, 30/360 and ACT/360 accrued |
-| 37 | margin-call | Prime brokerage margin engine: haircuts, staleness, calls, deposits, liquidation |
-| 38 | fx-converter | FX payments: rate book, quotes with expiry, booking, daily limits |
-| 39 | api-quota | Market data API metering: token buckets, monthly allowances, invoices |
-| 40 | hotel-rates | Hotel reservations: inventory per night, rate plans, pricing, cancellation |
-| 41 | tip-pool | Restaurant tip pools: lunch/dinner pools, eligibility, weights, statements |
-| 42 | gradebook | Course gradebook: submissions, late penalties, excusals, letter grades |
-| 43 | fifo-inventory | Multi-warehouse FIFO inventory: shipments, transfers, returns, valuation |
-| 44 | crowdfunding | Crowdfunding: tiers, pledge changes, settlement with failed charges, fees |
-| 45 | portfolio-rebalancer | Robo-advisor: models, restrictions, rebalance planning |
-| 46 | parcel-shipping | Checkout shipping: two carriers, dim weight, surcharges, delivery estimates |
-| 47 | league-table | League standings: fixtures, corrections, tie-breakers, form guide |
-| 48 | library-fines | Library circulation: branch calendars, holds, renewals, fines |
-| 49 | class-waitlist | Fitness studio: plans and credits, priority waitlist, promotion, late cancels |
-| 50 | capped-index | Index rebalance: eligibility, float adjustment, iterative capping, turnover |
+| 01 | research-portal | entitlement SQL precedence · list cache key missing the client firm · page overlap · tokens in access logs · digest job marks "sent" before sending |
+| 02 | payments-gateway | retry without a stable idempotency key (double charge) · retrying card declines · webhook HMAC over re-serialised JSON · JPY minor units · processor outage → 500 |
+| 03 | market-data-api | rate limiter before auth (shared bucket) · cache TTL ms vs s · mutating a cached object · SQL injection in search · errors missing from metrics (middleware order) |
+| 04 | trade-blotter | desk head amends other desks (object authorization) · two transactions for one booking · N+1 queries · business date vs UTC in the EOD job · ValueError → 500 |
+| 05 | alerts-delivery | job claimed by two workers · backoff max/min · 429 treated as permanent · IDOR via `?user_id=` · phone numbers in logs |
+| 06 | identity-service | reusable reset links · sessions with no absolute lifetime · lockout bypass by email case · account enumeration · stale permission cache |
+| 07 | billing-service | non-idempotent invoice run · `BETWEEN` double-counts usage · float/banker's rounding · tax adapter outage stops the run · duplicate payment webhooks |
+| 08 | document-sharing | expired share links · search ignores the ACL · cursor skips equal timestamps · preview cache ignores the version · body limit trusts Content-Length |
+| 09 | api-gateway | breaker never resets · request id not propagated · client tokens forwarded to a partner · sliding limiter counts rejections · retrying POSTs |
+| 10 | expense-reports | cross-team approval · FX cache key missing the date · poison receipt blocks the OCR batch · soft-deleted lines in totals · mass assignment |
 
 ---
 
 ## Suggested plan
 - **Week 1:** one or two Round 1 exercises per day (start with 01 Pot Luck, the workshop example, and 31, the workshop calendar).
-- **Week 2:** Round 2 21–50: the same topics as Round 1 01–30, but spread across several modules (do the Round 1 version of a topic
-  first, then its Round 2 version a few days later).
-- **Week 3+:** Round 2 tickets (01–20). Do a *different* ticket of a service you've seen before only after a week. The point is
-  navigating unfamiliar code.
+- **Week 2+:** Round 2 services, one ticket per session. Do a *different* ticket of a service you've seen before only after a week:
+  the point is navigating unfamiliar code. Across the 10 services, every common backend failure area comes up several times.
 - After each session: re-read your diff, the notes and the scorecard; write down one thing you'll do differently.
 - Also practise in the real environment: **HackerRank mock interviews** (named in the workshop).
 
 ## Honest caveats
-- Real codebases may be bigger (Round 2 likely thousands of lines, possibly with a front end). These are 75–750 lines so that 100 of them
-  stay verifiable. The skill (don't read everything; trace one path; derive tests from the spec) is the same.
-- None of the code has comments or docstrings, matching what candidates reported from the real interviews.
-- Some exercises (Round 1 #31, #34, #48 and several Round 2 tickets) use `zoneinfo`, which needs the system time-zone database (standard on Linux/macOS).
+- Real codebases may be bigger. Round 2 services are ~500–900 lines of Python plus a small Next.js app, so that every ticket stays
+  verifiable. The skill (don't read everything; trace one path; reproduce with a test) is the same.
+- Round 1 code has no comments or docstrings, matching what candidates reported. Round 2 services read like real code (a few
+  docstrings), but nothing points at a bug.
+- Some exercises (Round 1 #31, #34, #48) use `zoneinfo`, which needs the system time-zone database (standard on Linux/macOS).
 - Maintainer self-check: `python mock.py verify` proves for every exercise that the visible tests pass on the buggy code, every hidden
   check fails on it, and everything passes after the reference fixes.
 - Your own practice edits from 17 Oct (made directly in the old order-matching exercise) were kept in
-  `sessions/your-practice-order-matching-2026-10-17/`; the exercise itself (now Round 2 #25) was restored to its clean state.
+  `sessions/your-practice-order-matching-2026-10-17/`.
+- The previous 50 Round 2 exercises (tickets 01–20 and multi-module specs 21–50) are in git history if you want them back:
+  `git checkout HEAD -- round-2 interviewer-notes/round-2` restores them (move the new ones aside first).

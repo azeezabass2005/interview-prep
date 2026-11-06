@@ -1,0 +1,6 @@
+# Practice sessions: each is its own git repo created by `mock.py start`
+sessions/
+# Python caches and local databases
+__pycache__/
+*.pyc
+*.db

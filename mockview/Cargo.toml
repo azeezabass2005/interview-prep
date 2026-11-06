@@ -1,0 +1,28 @@
+[package]
+name = "mockview"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.104"
+base64 = "0.23.1"
+chrono = { version = "0.4.45", features = ["serde"] }
+clap = { version = "4.6.7", features = ["derive"] }
+cpal = "0.18.2"
+crossterm = "0.29.0"
+dirs = "7.0.0"
+hound = "3.5.1"
+ort = { version = "2.0.0-rc.15", features = ["download-binaries"] }
+rand = "0.10.3"
+ratatui = "0.30.2"
+regex = "1.13.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+tokio = { version = "1.54.0", features = ["full"] }
+toml = "1.1.8"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+uuid = { version = "1.28.0", features = ["v4"] }
+whisper-rs = { version = "0.16.0", features = ["openmp"] }
+zip = "9.0.5"

@@ -1,0 +1,4 @@
+target/
+runs/
+resume/*
+!resume/README.md

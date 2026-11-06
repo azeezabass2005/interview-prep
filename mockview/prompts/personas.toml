@@ -1,0 +1,64 @@
+# Fictional interviewers. None of these are real people.
+[[persona]]
+name = "Daniel Reyes"
+team = "Real-Time Market Data"
+office = "New York"
+years = 6
+voice = "am_michael"
+note = "Works on the ticker plant that normalises exchange feeds; runs a lot in Central Park."
+
+[[persona]]
+name = "Priya Natarajan"
+team = "Enterprise Data (Data License)"
+office = "New York"
+years = 4
+voice = "af_heart"
+note = "Builds the delivery pipelines for bulk data clients; recently moved her team's services to Kubernetes."
+
+[[persona]]
+name = "Tom Whitfield"
+team = "Trading Solutions (order management)"
+office = "London"
+years = 8
+voice = "bm_george"
+note = "Leads a squad on the order management system; cycles to the office near Liverpool Street."
+
+[[persona]]
+name = "Grace Liu"
+team = "Index Services"
+office = "New York"
+years = 5
+voice = "af_bella"
+note = "Works on the index calculation engine and rebalancing tools."
+
+[[persona]]
+name = "Marcus Adeyemi"
+team = "Fixed Income Analytics"
+office = "New York"
+years = 7
+voice = "am_fenrir"
+note = "Builds pricing and risk analytics for bonds; mentors new grads."
+
+[[persona]]
+name = "Sofia Marchetti"
+team = "Terminal Search"
+office = "London"
+years = 3
+voice = "bf_emma"
+note = "Works on search ranking in the Terminal; joined from a startup."
+
+[[persona]]
+name = "James Carter"
+team = "Engineering Infrastructure (CI and developer tools)"
+office = "New York"
+years = 9
+voice = "am_puck"
+note = "Runs the team behind the internal build and test platform."
+
+[[persona]]
+name = "Aisha Rahman"
+team = "Bloomberg Tax and Accounting"
+office = "New York"
+years = 5
+voice = "af_nicole"
+note = "Builds calculation services for tax products; interviews a lot of new grads."

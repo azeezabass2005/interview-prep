@@ -1,0 +1,42 @@
+[paths]
+# The exercises: your bloomberg-practice packs (Python only), or ~/Projects/interview-prep for the mock.py kit.
+kit = "~/Projects/bloomberg-practice"
+
+[interview]
+minutes = 60
+# Which rounds to pick from (e.g. ["round-1"], or ["round-2/harbor"] for one pack).
+exercise_pool = ["round-1", "round-2"]
+check_in_minutes = 8
+silence_prompt_seconds = 90
+no_test_change_minutes = 6
+
+[audio]
+input = "default"
+output = "default"
+# How long a pause ends your turn. Raise it if you get cut off while thinking.
+endpoint_silence_ms = 1300
+record_audio = false
+
+[stt]
+# "auto": the most accurate downloaded model (large-v3-turbo 8-bit). Or name a file in ~/.local/share/mockview/models.
+model = "auto"
+threads = 8
+
+[tts]
+speed = 1.0
+voice = "auto"
+
+[claude]
+# Empty = whatever Claude Code uses by default. Or e.g. "opus" / "sonnet".
+model = ""
+screenshots = true
+screenshot_width = 1600
+
+[editor]
+# Opened on the session folder when the exercise starts ("none" to skip).
+command = "zeditor"
+# Open the finished debrief in the editor too.
+open_debrief = true
+
+[layout]
+mode = "side"
